@@ -403,6 +403,48 @@
     generator: [{ id: 'a', x: 0, y: 24, label: '接线端' }, { id: 'b', x: 48, y: 24, label: '接线端' }],
     node: [{ id: 't', x: 8, y: 8, label: '连接点' }],
     crossOver: [{ id: 'w', x: 0, y: 20, label: '接线端' }, { id: 'e', x: 40, y: 20, label: '接线端' }, { id: 'n', x: 20, y: 0, label: '接线端' }, { id: 's', x: 20, y: 40, label: '接线端' }],
+
+    /* ---- 光学：光线接入/射出点 ---- */
+    convexLens: [{ id: 'in', x: 8, y: 42, label: '入射点' }, { id: 'out', x: 36, y: 42, label: '出射点' }],
+    concaveLens: [{ id: 'in', x: 10, y: 42, label: '入射点' }, { id: 'out', x: 34, y: 42, label: '出射点' }],
+    prism: [{ id: 'v1', x: 6, y: 58, label: '左下顶点' }, { id: 'v2', x: 70, y: 58, label: '右下顶点' }, { id: 'v3', x: 38, y: 6, label: '上顶点' }],
+    planeMirror: [{ id: 'a', x: 0, y: 12, label: '镜左端' }, { id: 'b', x: 88, y: 12, label: '镜右端' }],
+    convexMirror: [{ id: 't', x: 6, y: 2, label: '镜上端' }, { id: 'b', x: 6, y: 42, label: '镜下端' }],
+    concaveMirror: [{ id: 't', x: 6, y: 2, label: '镜上端' }, { id: 'b', x: 6, y: 42, label: '镜下端' }],
+    fiber: [{ id: 'in', x: 0, y: 11, label: '入光口' }, { id: 'out1', x: 90, y: 4, label: '上出光口' }, { id: 'out2', x: 90, y: 18, label: '下出光口' }],
+    rayArrow: [{ id: 'tail', x: 0, y: 9, label: '箭尾' }, { id: 'tip', x: 90, y: 9, label: '箭头' }],
+    pointSource: [{ id: 'c', x: 20, y: 20, label: '光源中心' }],
+
+    /* ---- 力学：绳/杆/弹簧两端与悬挂点 ---- */
+    spring: [{ id: 'a', x: 0, y: 13, label: '左端' }, { id: 'b', x: 80, y: 13, label: '右端' }],
+    springScale: [{ id: 'top', x: 22, y: 2, label: '提环端' }, { id: 'hook', x: 22, y: 104, label: '挂钩端' }],
+    rope: [{ id: 'a', x: 0, y: 7, label: '左端' }, { id: 'b', x: 90, y: 7, label: '右端' }],
+    rod: [{ id: 'a', x: 0, y: 8, label: '杆左端' }, { id: 'b', x: 100, y: 8, label: '杆右端' }],
+    forceArrow: [{ id: 'tail', x: 0, y: 11, label: '作用点' }, { id: 'tip', x: 92, y: 11, label: '箭头' }],
+    pulley: [{ id: 'hang', x: 28, y: 2, label: '悬挂点' }],
+    pulleyMoving: [{ id: 'hang', x: 28, y: 4, label: '悬挂点' }],
+    pulleySystem: [{ id: 'hang', x: 10, y: 0, label: '悬挂点' }, { id: 'tail', x: 76, y: 86, label: '绳末端' }],
+    groundLine: [{ id: 'a', x: 0, y: 8, label: '左端点' }, { id: 'b', x: 120, y: 8, label: '右端点' }],
+    weight: [{ id: 'hook', x: 15, y: 3, label: '挂钩' }],
+
+    /* ---- 通用：轴线端点与箭头端 ---- */
+    axes: [{ id: 'o', x: 10, y: 110, label: '原点' }, { id: 'x', x: 142, y: 110, label: 'x轴端' }, { id: 'y', x: 10, y: 10, label: 'y轴端' }],
+    axesFull: [{ id: 'a', x: 6, y: 20, label: '左端点' }, { id: 'b', x: 154, y: 20, label: '右端点' }],
+    doubleArrow: [{ id: 'l', x: 10, y: 12, label: '左箭头' }, { id: 'r', x: 90, y: 12, label: '右箭头' }],
+    curvedArrow: [{ id: 'tail', x: 4, y: 46, label: '箭尾' }, { id: 'tip', x: 64, y: 12, label: '箭头' }],
+    arrowDown: [{ id: 'tail', x: 12, y: 0, label: '尾端' }, { id: 'tip', x: 12, y: 96, label: '箭头' }],
+
+    /* ---- 连接线：首尾端 ---- */
+    wireH: [{ id: 'a', x: 0, y: 12, label: '左端' }, { id: 'b', x: 120, y: 12, label: '右端' }],
+    wireElbow: [{ id: 'a', x: 0, y: 12, label: '起点' }, { id: 'b', x: 60, y: 60, label: '终点' }],
+    wireDash: [{ id: 'a', x: 0, y: 12, label: '左端' }, { id: 'b', x: 120, y: 12, label: '右端' }],
+    wireBus: [{ id: 'a', x: 0, y: 12, label: '左端' }, { id: 'b', x: 120, y: 12, label: '右端' }],
+    wireJumper: [{ id: 'a', x: 0, y: 12, label: '左端' }, { id: 'b', x: 120, y: 12, label: '右端' }],
+
+    /* ---- 化学键：两原子端 ---- */
+    bondSingle: [{ id: 'a', x: 4, y: 14, label: '原子端' }, { id: 'b', x: 60, y: 14, label: '原子端' }],
+    bondDouble: [{ id: 'a', x: 4, y: 14, label: '原子端' }, { id: 'b', x: 60, y: 14, label: '原子端' }],
+    bondTriple: [{ id: 'a', x: 4, y: 14, label: '原子端' }, { id: 'b', x: 60, y: 14, label: '原子端' }],
   };
   list.forEach((d) => { if (TERMINALS[d.id]) d.terminals = TERMINALS[d.id]; });
 

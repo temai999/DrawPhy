@@ -414,70 +414,14 @@
   M.localBBox = function (o) {
     const mod = moduleOf(o);
     if (mod && typeof mod.bbox === 'function') return mod.bbox(o);
-    switch (o.type) {
-      case 'line':
-      case 'arrow':
-        return { x: Math.min(o.x1, o.x2), y: Math.min(o.y1, o.y2), w: Math.abs(o.x2 - o.x1), h: Math.abs(o.y2 - o.y1) };
-      case 'polyline': {
-        const xs = o.points.map((p) => p[0]), ys = o.points.map((p) => p[1]);
-        return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
-      }
-      case 'circle':
-        return { x: o.cx - o.r, y: o.cy - o.r, w: o.r * 2, h: o.r * 2 };
-      case 'ellipse':
-        return { x: o.cx - o.rx, y: o.cy - o.ry, w: o.rx * 2, h: o.ry * 2 };
-      case 'arc': {
-        let bb = Infinity;
-        const [a0, a1] = [o.a0, o.a1];
-        // 采样求包围盒（足够精确）
-        const pts = [];
-        for (let a = a0; a <= a1 + 0.001; a += Math.max(2, (a1 - a0) / 24)) {
-          pts.push([o.cx + o.r * Math.cos(G.rad(a)), o.cy + o.r * Math.sin(G.rad(a))]);
-        }
-        const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-        return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
-      }
-      case 'path':
-        return G.pathBBox(o.d);
-      case 'rect':
-        return { x: Math.min(o.x, o.x + o.w), y: Math.min(o.y, o.y + o.h), w: Math.abs(o.w), h: Math.abs(o.h) };
-      case 'point': {
-        const r = o.r || 3.5;
-        return { x: o.x - r, y: o.y - r, w: r * 2, h: r * 2 };
-      }
-      case 'text': {
-        const size = o.size || 16;
-        const len = (o.text || '').length * size * 0.62 + 4;
-        const w = len, h = size * 1.2;
-        const ax = o.anchor === 'middle' ? w / 2 : 0;
-        return { x: o.x - ax, y: o.y - size * 0.85, w, h };
-      }
-      case 'dim': {
-        const x1 = Math.min(o.x1, o.x2), y1 = Math.min(o.y1, o.y2);
-        const x2 = Math.max(o.x1, o.x2), y2 = Math.max(o.y1, o.y2);
-        const off = o.offset || 0;
-        return { x: x1, y: y1 - Math.abs(off) - 10, w: x2 - x1, h: y2 - y1 + Math.abs(off) * 2 + 20 };
-      }
-      case 'angle':
-        return { x: o.cx - o.r, y: o.cy - o.r, w: o.r * 2, h: o.r * 2 };
-      case 'textbox':
-        return { x: o.x, y: o.y, w: o.w, h: o.h };
-      case 'callout': {
-        const x1 = Math.min(o.tx, o.bx), y1 = Math.min(o.ty, o.by);
-        const x2 = Math.max(o.tx, o.bx + o.w), y2 = Math.max(o.ty, o.by + o.h);
-        return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
-      }
-      case 'part': {
-        const def = DP.parts.byId[o.partId];
-        const w = def ? def.w : 40, h = def ? def.h : 40;
-        const m = M.partMatrix(o);
-        const corners = [[0, 0], [w, 0], [w, h], [0, h]].map(([x, y]) => G.apply(m, { x, y }));
-        const xs = corners.map((p) => p.x), ys = corners.map((p) => p.y);
-        return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
-      }
-      default:
-        return { x: 0, y: 0, w: 0, h: 0 };
+    /* 单轨收敛（阶段 5 收尾）：15 种类型全部由模块提供 bbox，
+       未注册类型（模块缺失/未知类型）回退零包围盒并告警 */
+    if (!M._warnedType) M._warnedType = {};
+    if (!M._warnedType[o.type]) {
+      M._warnedType[o.type] = 1;
+      console.warn('[DrawPhy] 未注册类型缺 bbox 模块:', o.type);
     }
+    return { x: 0, y: 0, w: 0, h: 0 };
   };
 
   M.bbox = function (objs) {
@@ -568,114 +512,19 @@
   M.translateObj = function (o, dx, dy) {
     const mod = moduleOf(o);
     if (mod && typeof mod.translate === 'function') { mod.translate(o, dx, dy); return; }
-    switch (o.type) {
-      case 'line':
-      case 'arrow': o.x1 += dx; o.x2 += dx; o.y1 += dy; o.y2 += dy; break;
-      case 'polyline': o.points = o.points.map(([x, y]) => [x + dx, y + dy]); break;
-      case 'circle': case 'ellipse': case 'arc': case 'angle': o.cx += dx; o.cy += dy; break;
-      case 'rect': o.x += dx; o.y += dy; break;
-      case 'text': o.x += dx; o.y += dy; break;
-      case 'textbox': o.x += dx; o.y += dy; break;
-      case 'callout': o.tx += dx; o.ty += dy; o.bx += dx; o.by += dy; break;
-      case 'path': o.d = G.mapPath(o.d, (p) => ({ x: p.x + dx, y: p.y + dy })); break;
-      case 'dim': o.x1 += dx; o.x2 += dx; o.y1 += dy; o.y2 += dy; break;
-      case 'point': o.x += dx; o.y += dy; break;
-      case 'part': o.x += dx; o.y += dy; break;
-    }
+    /* 未注册类型：不可平移（单轨收敛后无旧 switch 兜底） */
   };
 
   M.scaleObj = function (o, sx, sy, ax, ay) {
     const mod = moduleOf(o);
     if (mod && typeof mod.scale === 'function') { mod.scale(o, sx, sy, ax, ay); return; }
-    const px = (x) => ax + (x - ax) * sx;
-    const py = (y) => ay + (y - ay) * sy;
-    const k = (Math.abs(sx) + Math.abs(sy)) / 2;
-    switch (o.type) {
-      case 'line':
-      case 'arrow': o.x1 = px(o.x1); o.x2 = px(o.x2); o.y1 = py(o.y1); o.y2 = py(o.y2); break;
-      case 'polyline': o.points = o.points.map(([x, y]) => [px(x), py(y)]); break;
-      case 'circle': {
-        o.cx = px(o.cx); o.cy = py(o.cy);
-        if (Math.abs(sx - sy) > 0.01) { o.type = 'ellipse'; o.rx = o.r * Math.abs(sx); o.ry = o.r * Math.abs(sy); delete o.r; }
-        else o.r *= Math.abs(sx);
-        break;
-      }
-      case 'ellipse': o.cx = px(o.cx); o.cy = py(o.cy); o.rx *= Math.abs(sx); o.ry *= Math.abs(sy); break;
-      case 'arc': o.cx = px(o.cx); o.cy = py(o.cy); o.r *= k; break;
-      case 'rect': {
-        const x2 = o.x + o.w, y2 = o.y + o.h;
-        o.x = px(o.x); o.y = py(o.y);
-        o.w = px(x2) - o.x; o.h = py(y2) - o.y;
-        break;
-      }
-      case 'text': o.x = px(o.x); o.y = py(o.y); o.size = Math.max(6, (o.size || 16) * k); break;
-      case 'textbox': {
-        const x2 = o.x + o.w, y2 = o.y + o.h;
-        o.x = px(o.x); o.y = py(o.y);
-        o.w = px(x2) - o.x; o.h = py(y2) - o.y;
-        o.size = Math.max(6, (o.size || 14) * k);
-        break;
-      }
-      case 'callout': {
-        const x2 = o.bx + o.w, y2 = o.by + o.h;
-        o.tx = px(o.tx); o.ty = py(o.ty);
-        o.bx = px(o.bx); o.by = py(o.by);
-        o.w = px(x2) - o.bx; o.h = py(y2) - o.by;
-        o.size = Math.max(6, (o.size || 13) * k);
-        break;
-      }
-      case 'path': o.d = G.mapPath(o.d, (p) => ({ x: px(p.x), y: py(p.y) })); break;
-      case 'dim': o.x1 = px(o.x1); o.x2 = px(o.x2); o.y1 = py(o.y1); o.y2 = py(o.y2); o.offset *= k; break;
-      case 'angle': o.cx = px(o.cx); o.cy = py(o.cy); o.r *= k; break;
-      case 'point': o.x = px(o.x); o.y = py(o.y); break;
-      case 'part': {
-        const bb = M.localBBox(o);
-        // 先定位旋转中心，再缩放
-        const center = { x: bb.x + bb.w / 2, y: bb.y + bb.h / 2 };
-        const nc = { x: px(center.x), y: py(center.y) };
-        o.s = (o.s == null ? 1 : o.s) * k;
-        M.translateObj(o, nc.x - center.x, nc.y - center.y);
-        break;
-      }
-    }
+    /* 未注册类型：不可缩放 */
   };
 
   M.mirrorObj = function (o, axis) {
     const mod = moduleOf(o);
     if (mod && typeof mod.mirror === 'function') { mod.mirror(o, axis); return; }
-    const bb = M.localBBox(o);
-    const cx = bb.x + bb.w / 2, cy = bb.y + bb.h / 2;
-    const fx = (v) => (axis === 'h' ? 2 * cx - v : v);
-    const fy = (v) => (axis === 'v' ? 2 * cy - v : v);
-    switch (o.type) {
-      case 'line':
-      case 'arrow': o.x1 = fx(o.x1); o.x2 = fx(o.x2); o.y1 = fy(o.y1); o.y2 = fy(o.y2); break;
-      case 'polyline': o.points = o.points.map(([x, y]) => [fx(x), fy(y)]); break;
-      case 'circle': case 'ellipse': o.cx = fx(o.cx); o.cy = fy(o.cy); break;
-      case 'rect': o.x = fx(o.x + o.w); o.y = fy(o.y + o.h); break;
-      case 'textbox': o.x = fx(o.x + o.w); o.y = fy(o.y + o.h); break;
-      case 'callout':
-        o.tx = fx(o.tx); o.ty = fy(o.ty);
-        o.bx = fx(o.bx + o.w); o.by = fy(o.by + o.h);
-        break;
-      case 'path': o.d = G.mapPath(o.d, (p) => ({ x: fx(p.x), y: fy(p.y) })); break;
-      case 'arc': {
-        /* 角度镜像（先缓存旧值，避免链式覆盖）：
-           axis='v'（上下翻 y→2cy-y）：a0'=-A1, a1'=-A0
-           axis='h'（左右翻 x→2cx-x）：a0'=180-A1, a1'=180-A0
-           镜像后 a1'-a0' 仍等于原跨度，large/sweep 标志不变，弧集合正确。 */
-        o.cx = fx(o.cx); o.cy = fy(o.cy);
-        const A0 = o.a0, A1 = o.a1;
-        if (axis === 'v') { o.a0 = -A1; o.a1 = -A0; }
-        else { o.a0 = 180 - A1; o.a1 = 180 - A0; }
-        break;
-      }
-      case 'text': o.x = fx(o.x); o.y = fy(o.y); if (o.anchor === 'middle') o.anchor = 'middle'; break;
-      case 'part': o.flip = !o.flip; break;
-      case 'angle': o.cx = fx(o.cx); o.cy = fy(o.cy); break;
-      case 'dim': o.x1 = fx(o.x1); o.x2 = fx(o.x2); o.y1 = fy(o.y1); o.y2 = fy(o.y2); break;
-      case 'point': o.x = fx(o.x); o.y = fy(o.y); break;
-    }
+    /* 未注册类型：不可镜像 */
   };
 
   /* ------------------------------- 吸附 ------------------------------- */
@@ -697,70 +546,9 @@
         for (const a of mod.anchors(o) || []) push(a.x, a.y, anchorLabel(a), o.id, a.tid);
         continue;
       }
-      switch (o.type) {
-        case 'line':
-        case 'arrow':
-          push(o.x1, o.y1, '端点', o.id);
-          push(o.x2, o.y2, '端点', o.id);
-          push((o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2, '中点', o.id);
-          break;
-        case 'polyline':
-          o.points.forEach(([x, y]) => push(x, y, '端点', o.id));
-          for (let i = 0; i < o.points.length - 1; i++) {
-            const [x1, y1] = o.points[i], [x2, y2] = o.points[i + 1];
-            push((x1 + x2) / 2, (y1 + y2) / 2, '中点', o.id);
-          }
-          break;
-        case 'circle': case 'ellipse': {
-          const rx = o.type === 'circle' ? o.r : o.rx, ry = o.type === 'circle' ? o.r : o.ry;
-          push(o.cx, o.cy, '圆心', o.id);
-          push(o.cx + rx, o.cy, '象限', o.id);
-          push(o.cx - rx, o.cy, '象限', o.id);
-          push(o.cx, o.cy + ry, '象限', o.id);
-          push(o.cx, o.cy - ry, '象限', o.id);
-          break;
-        }
-        case 'arc':
-          push(o.cx, o.cy, '圆心', o.id);
-          push(o.cx + o.r * Math.cos(G.rad(o.a0)), o.cy + o.r * Math.sin(G.rad(o.a0)), '端点', o.id);
-          push(o.cx + o.r * Math.cos(G.rad(o.a1)), o.cy + o.r * Math.sin(G.rad(o.a1)), '端点', o.id);
-          break;
-        case 'rect':
-          push(o.x, o.y, '端点', o.id);
-          push(o.x + o.w, o.y, '端点', o.id);
-          push(o.x + o.w, o.y + o.h, '端点', o.id);
-          push(o.x, o.y + o.h, '端点', o.id);
-          push(o.x + o.w / 2, o.y + o.h / 2, '中心', o.id);
-          break;
-        case 'point':
-          push(o.x, o.y, '点', o.id);
-          break;
-        case 'text': case 'part': case 'textbox': case 'callout': {
-          const bb = M.localBBox(o);
-          push(bb.x, bb.y, '端点', o.id);
-          push(bb.x + bb.w, bb.y, '端点', o.id);
-          push(bb.x, bb.y + bb.h, '端点', o.id);
-          push(bb.x + bb.w, bb.y + bb.h, '端点', o.id);
-          push(bb.x + bb.w / 2, bb.y + bb.h / 2, '中心', o.id);
-          /* 标注的指向尖点单独作为吸附锚点 */
-          if (o.type === 'callout') push(o.tx, o.ty, '指向点', o.id);
-          break;
-        }
-        case 'dim':
-          push(o.x1, o.y1, '端点', o.id);
-          push(o.x2, o.y2, '端点', o.id);
-          push((o.x1 + o.x2) / 2, (o.y1 + o.y2) / 2, '中点', o.id);
-          break;
-        case 'angle': {
-          push(o.cx, o.cy, '顶点', o.id);
-          push(o.cx + o.r * Math.cos(G.rad(o.a0)), o.cy + o.r * Math.sin(G.rad(o.a0)), '端点', o.id);
-          push(o.cx + o.r * Math.cos(G.rad(o.a1)), o.cy + o.r * Math.sin(G.rad(o.a1)), '端点', o.id);
-          break;
-        }
-        case 'path':
-          for (const p of G.pathAnchors(o.d)) push(p.x, p.y, '端点', o.id);
-          break;
-      }
+      /* 未注册类型：无吸附锚点（15 种类型全部由模块 anchors 提供） */
+      if (!M._warnedType) M._warnedType = {};
+      if (!M._warnedType[o.type]) { M._warnedType[o.type] = 1; console.warn('[DrawPhy] 未注册类型缺 anchors 模块:', o.type); }
     }
     return out;
   };

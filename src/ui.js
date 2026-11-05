@@ -772,81 +772,10 @@
 
   /* ------------------------------- 命中测试 ------------------------------- */
   function hitObject(o, p, tol) {
-    const rs = o.style || st.style;
     const mod = M.moduleOf(o);
     if (mod && typeof mod.hitTest === 'function') return !!mod.hitTest(o, p, tol);
-    switch (o.type) {
-      case 'line':
-      case 'arrow':
-        return G.distToSeg(p, { x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 }) <= tol;
-      case 'polyline': {
-        for (let i = 0; i < o.points.length - 1; i++) {
-          if (G.distToSeg(p, { x: o.points[i][0], y: o.points[i][1] }, { x: o.points[i + 1][0], y: o.points[i + 1][1] }) <= tol) return true;
-        }
-        return !!o.closed && G.pointInPoly(p, o.points);
-      }
-      case 'circle': {
-        const d = Math.hypot(p.x - o.cx, p.y - o.cy);
-        if (rs.fill !== 'none' && rs.fill && d < o.r) return true;
-        return Math.abs(d - o.r) <= tol;
-      }
-      case 'ellipse': {
-        const v = ((p.x - o.cx) / (o.rx || 1)) ** 2 + ((p.y - o.cy) / (o.ry || 1)) ** 2;
-        if (rs.fill !== 'none' && rs.fill && v <= 1) return true;
-        return Math.abs(Math.sqrt(v) - 1) * Math.min(o.rx, o.ry) <= tol;
-      }
-      case 'arc': {
-        const d = Math.hypot(p.x - o.cx, p.y - o.cy);
-        if (Math.abs(d - o.r) > tol) return false;
-        let a = G.deg(Math.atan2(p.y - o.cy, p.x - o.cx));
-        while (a < o.a0) a += 360;
-        return a <= o.a1 + 1;
-      }
-      case 'rect': {
-        const { x, y, w, h } = o;
-        const inside = p.x > x && p.x < x + w && p.y > y && p.y < y + h;
-        if (inside && rs.fill !== 'none' && rs.fill) return true;
-        if (inside) return true;
-        return Math.abs(p.x - x) < tol || Math.abs(p.x - x - w) < tol || Math.abs(p.y - y) < tol || Math.abs(p.y - y - h) < tol;
-      }
-      case 'text': {
-        const bb = M.localBBox(o);
-        return p.x >= bb.x - 4 && p.x <= bb.x + bb.w + 4 && p.y >= bb.y - 4 && p.y <= bb.y + bb.h + 4;
-      }
-      case 'textbox': {
-        const bb = M.localBBox(o);
-        return p.x >= bb.x - 2 && p.x <= bb.x + bb.w + 2 && p.y >= bb.y - 2 && p.y <= bb.y + bb.h + 2;
-      }
-      case 'callout': {
-        const bb = M.localBBox(o);
-        if (p.x >= bb.x - 2 && p.x <= bb.x + bb.w + 2 && p.y >= bb.y - 2 && p.y <= bb.y + bb.h + 2) return true;
-        return G.distToSeg(p, { x: o.tx, y: o.ty }, { x: o.bx + o.w / 2, y: o.by + o.h / 2 }) <= tol;
-      }
-      case 'path':
-        return G.pathDistance(o.d, p) <= tol;
-      case 'dim': {
-        if (G.distToSeg(p, { x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 }) <= tol * 2) return true;
-        const dx = o.x2 - o.x1, dy = o.y2 - o.y1;
-        const len = Math.hypot(dx, dy) || 1;
-        const nx = -dy / len, ny = dx / len;
-        const off = o.offset == null ? -24 : o.offset;
-        const p1 = { x: o.x1 + nx * off, y: o.y1 + ny * off };
-        const p2 = { x: o.x2 + nx * off, y: o.y2 + ny * off };
-        return G.distToSeg(p, p1, p2) <= tol * 2 ||
-          G.distToSeg(p, { x: o.x1, y: o.y1 }, p1) <= tol ||
-          G.distToSeg(p, { x: o.x2, y: o.y2 }, p2) <= tol;
-      }
-      case 'point':
-        return Math.hypot(p.x - o.x, p.y - o.y) <= Math.max(tol, o.r || 3.5);
-      case 'angle':
-        return Math.abs(Math.hypot(p.x - o.cx, p.y - o.cy) - o.r) <= tol * 1.5;
-      case 'part': {
-        const bb = M.localBBox(o);
-        return p.x >= bb.x - 2 && p.x <= bb.x + bb.w + 2 && p.y >= bb.y - 2 && p.y <= bb.y + bb.h + 2;
-      }
-      default:
-        return false;
-    }
+    /* 单轨收敛：未注册类型不可命中 */
+    return false;
   }
 
   function hitTest(p, tol) {
@@ -862,69 +791,12 @@
     if (mod && typeof mod.nodes === 'function') {
       return (mod.nodes(o) || []).map((n) => ({ key: n.id, x: n.x, y: n.y }));
     }
-    switch (o.type) {
-      case 'line':
-      case 'arrow':
-        return [
-          { key: 'x1', x: o.x1, y: o.y1 },
-          { key: 'x2', x: o.x2, y: o.y2 },
-        ];
-      case 'polyline':
-        return o.points.map((p, i) => ({ key: i, x: p[0], y: p[1] }));
-      case 'circle':
-        return [
-          { key: 'c', x: o.cx, y: o.cy },
-          { key: 'r', x: o.cx + o.r, y: o.cy },
-        ];
-      case 'ellipse':
-        return [
-          { key: 'c', x: o.cx, y: o.cy },
-          { key: 'rx', x: o.cx + o.rx, y: o.cy },
-          { key: 'ry', x: o.cx, y: o.cy + o.ry },
-        ];
-      case 'rect':
-        return [
-          { key: 'nw', x: o.x, y: o.y },
-          { key: 'ne', x: o.x + o.w, y: o.y },
-          { key: 'se', x: o.x + o.w, y: o.y + o.h },
-          { key: 'sw', x: o.x, y: o.y + o.h },
-        ];
-      default: return [];
-    }
+    return [];
   }
+
   function setNode(o, key, p) {
     const mod = M.moduleOf(o);
     if (mod && typeof mod.setNode === 'function') { mod.setNode(o, key, p); return; }
-    switch (o.type) {
-      case 'line':
-      case 'arrow':
-        if (key === 'x1') { o.x1 = p.x; o.y1 = p.y; }
-        else { o.x2 = p.x; o.y2 = p.y; }
-        break;
-      case 'polyline':
-        o.points[key] = [G.round(p.x), G.round(p.y)];
-        break;
-      case 'circle':
-        if (key === 'c') { o.cx = p.x; o.cy = p.y; }
-        else o.r = Math.max(1, G.dist({ x: o.cx, y: o.cy }, p));
-        break;
-      case 'ellipse':
-        if (key === 'c') { o.cx = p.x; o.cy = p.y; }
-        else if (key === 'rx') o.rx = Math.max(1, Math.abs(p.x - o.cx));
-        else o.ry = Math.max(1, Math.abs(p.y - o.cy));
-        break;
-      case 'rect': {
-        const x2 = o.x + o.w, y2 = o.y + o.h;
-        let nx = o.x, ny = o.y, nx2 = x2, ny2 = y2;
-        if (key === 'nw') { nx = p.x; ny = p.y; }
-        if (key === 'ne') { nx2 = p.x; ny = p.y; }
-        if (key === 'se') { nx2 = p.x; ny2 = p.y; }
-        if (key === 'sw') { nx = p.x; ny2 = p.y; }
-        o.x = Math.min(nx, nx2); o.y = Math.min(ny, ny2);
-        o.w = Math.abs(nx2 - nx); o.h = Math.abs(ny2 - ny);
-        break;
-      }
-    }
   }
 
   function handleAt(p) {
@@ -2262,9 +2134,32 @@
         extra = `<div class="row"><label>标注</label><input type="text" id="pDimLabel" value="${sel[0].label || ''}" placeholder="${sel[0].value ?? ''}"></div>`;
       }
       if (sel.length === 1 && sel[0].type === 'part') {
+        const def = DP.parts.byId[sel[0].partId];
+        const terms = (def && def.terminals) || [];
+        const tHtml = terms.length
+          ? `<div class="props-sub">端子（${terms.length}）</div><p class="tip">${terms.map((t) => t.label || t.id).join(' · ')}</p>`
+          : '';
         extra = `<div class="row"><label>旋转</label>
           <button class="mini" data-rot="-90">-90°</button><button class="mini" data-rot="90">+90°</button>
-          <button class="mini" data-flip="1">翻转</button></div>`;
+          <button class="mini" data-flip="1">翻转</button></div>${tHtml}`;
+      }
+      if (sel.length === 1 && (sel[0].type === 'line' || sel[0].type === 'arrow')) {
+        const b = sel[0].bind || {};
+        const desc = [];
+        ['x1', 'x2'].forEach((k) => {
+          if (!b[k]) return;
+          const host = st.objects.find((o) => o.id === b[k].id);
+          if (!host) { desc.push(`${k === 'x1' ? '起点' : '终点'}→已删除对象`); return; }
+          const hname = host.type === 'part' ? ((DP.parts.byId[host.partId] || {}).name || host.partId) : host.type;
+          let tname = '';
+          if (b[k].terminal) {
+            const tlist = ((DP.parts.byId[host.partId] || {}).terminals) || [];
+            const t = tlist.find((x) => x.id === b[k].terminal);
+            tname = ' ' + ((t && (t.label || t.id)) || b[k].terminal);
+          }
+          desc.push(`${k === 'x1' ? '起点' : '终点'}→${hname}${tname}`);
+        });
+        if (desc.length) extra += `<div class="props-sub">粘附</div><p class="tip">${desc.join('<br>')}</p>`;
       }
       box.innerHTML = `<div class="props-title">已选 ${sel.length} 个 · ${types}</div>
         <div class="kv"><span>X</span><b>${G.round(bb.x)}</b><span>Y</span><b>${G.round(bb.y)}</b>

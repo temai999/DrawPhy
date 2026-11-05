@@ -161,15 +161,6 @@
      保证模块路径与旧 switch 的输出同源，不会出现两套公式） */
   R.arrowHead = arrowHead;
 
-  function lineWithArrows(o, rs) {
-    const ang = Math.atan2(o.y2 - o.y1, o.x2 - o.x1);
-    let out = `<line x1="${r2(o.x1)}" y1="${r2(o.y1)}" x2="${r2(o.x2)}" y2="${r2(o.y2)}"${strokeAttrs(rs)}/>`;
-    const size = Math.max(8, rs.width * 4.2);
-    if (o.style && o.style.arrow === 'both') out += arrowHead(o.x1, o.y1, ang + Math.PI, size, rs.stroke);
-    if (!o.style || o.style.arrow !== 'none') out += arrowHead(o.x2, o.y2, ang, size, rs.stroke);
-    return out;
-  }
-
   /* ------------------------------ 对象入口 ------------------------------ */
   R.object = function (o) {
     const rs = o.style || DP.state.style;
@@ -178,57 +169,8 @@
       return R.drawable(mod.render(o, { style: rs }));
     }
     switch (o.type) {
-      case 'arrow':
-        return lineWithArrows(o, rs);
-      case 'dim': {
-        const dx = o.x2 - o.x1, dy = o.y2 - o.y1;
-        const len = Math.hypot(dx, dy) || 1;
-        const nx = -dy / len, ny = dx / len;
-        const off = o.offset == null ? -24 : o.offset;
-        const p1 = { x: o.x1 + nx * off, y: o.y1 + ny * off };
-        const p2 = { x: o.x2 + nx * off, y: o.y2 + ny * off };
-        const ang = Math.atan2(dy, dx);
-        let out = '';
-        out += `<line x1="${r2(o.x1)}" y1="${r2(o.y1)}" x2="${r2(p1.x)}" y2="${r2(p1.y)}"${strokeAttrs(rs)} stroke-width="${r2(rs.width * 0.7)}"/>`;
-        out += `<line x1="${r2(o.x2)}" y1="${r2(o.y2)}" x2="${r2(p2.x)}" y2="${r2(p2.y)}"${strokeAttrs(rs)} stroke-width="${r2(rs.width * 0.7)}"/>`;
-        out += `<line x1="${r2(p1.x)}" y1="${r2(p1.y)}" x2="${r2(p2.x)}" y2="${r2(p2.y)}"${strokeAttrs(rs)}/>`;
-        const size = Math.max(7, rs.width * 3.4);
-        out += arrowHead(p1.x, p1.y, ang + Math.PI, size, rs.stroke);
-        out += arrowHead(p2.x, p2.y, ang, size, rs.stroke);
-        const label = o.label || `${DP.geom.round(o.value != null ? o.value : Math.hypot(dx, dy) / (o.scale || 1))}${o.unit || ''}`;
-        const mx = (p1.x + p2.x) / 2 + nx * 10, my = (p1.y + p2.y) / 2 + ny * 10;
-        out += `<text x="${r2(mx)}" y="${r2(my)}" font-size="${r2(o.size || 14)}" font-family="${FONT}" text-anchor="middle" fill="${rs.stroke}">${R.escape(label)}</text>`;
-        return out;
-      }
-      case 'angle': {
-        let out = `<path d="${DP.geom.arcPath(o.cx, o.cy, o.r, o.a0, o.a1)}"${paint(rs)}${strokeAttrs(rs)}/>`;
-        const mid = (o.a0 + o.a1) / 2;
-        const tx = o.cx + (o.r + 16) * Math.cos(DP.geom.rad(mid));
-        const ty = o.cy + (o.r + 16) * Math.sin(DP.geom.rad(mid));
-        const val = o.label || `${Math.round(Math.abs(o.a1 - o.a0))}°`;
-        out += `<text x="${r2(tx)}" y="${r2(ty)}" font-size="${r2(o.size || 14)}" font-family="${FONT}" text-anchor="middle" fill="${rs.stroke}">${R.escape(val)}</text>`;
-        return out;
-      }
-      case 'part': {
-        const def = DP.parts.byId[o.partId];
-        if (!def) return '';
-        const m = DP.model.partMatrix(o);
-        const body = def.shapes.map((s) => R.primitive(s, rs)).join('');
-        return `<g transform="matrix(${m.map((v) => r2(v)).join(' ')})">${body}</g>`;
-      }
-      case 'textbox': {
-        let out = `<rect x="${r2(o.x)}" y="${r2(o.y)}" width="${r2(o.w)}" height="${r2(o.h)}" rx="4"${paint(rs, o)}${strokeAttrs(rs)}/>`;
-        out += `<text x="${r2(o.x + o.w / 2)}" y="${r2(o.y + o.h / 2 + (o.size || 14) * 0.35)}" font-size="${r2(o.size || 14)}" font-family="${FONT}" text-anchor="middle" fill="${rs.stroke}">${R.escape(o.text || '')}</text>`;
-        return out;
-      }
-      case 'callout': {
-        const cx = o.bx + o.w / 2, cy = o.by + o.h / 2;
-        let out = `<line x1="${r2(o.tx)}" y1="${r2(o.ty)}" x2="${r2(cx)}" y2="${r2(cy)}"${strokeAttrs(rs, 'solid')} stroke-width="${r2(rs.width * 0.8)}"/>`;
-        out += `<circle cx="${r2(o.tx)}" cy="${r2(o.ty)}" r="${r2(2.5)}" fill="${rs.stroke}"/>`;
-        out += `<rect x="${r2(o.bx)}" y="${r2(o.by)}" width="${r2(o.w)}" height="${r2(o.h)}" rx="5"${paint(rs, o)}${strokeAttrs(rs)}/>`;
-        out += `<text x="${r2(cx)}" y="${r2(cy + (o.size || 13) * 0.35)}" font-size="${r2(o.size || 13)}" font-family="${FONT}" text-anchor="middle" fill="${rs.stroke}">${R.escape(o.text || '')}</text>`;
-        return out;
-      }
+      /* 复合类型（arrow/dim/angle/part/textbox/callout）已由模块 render 接管；
+         未注册类型回退图元渲染（primitive 内部仍按图元类型分派） */
       default:
         return R.primitive(o, rs);
     }
