@@ -28,10 +28,13 @@
         style: stl,
       }), { type: mod.type });
     }
-    if (type === 'arrow') {
+    if (type === 'arrow' || type === 'ray') {
+      /* arrow 的箭头在端点（style.arrow 区分单/双），ray 的箭头在中点（无 arrow 字段） */
+      const style = type === 'arrow'
+        ? Object.assign({}, stl, { arrow: tool === 'darrow' ? 'both' : 'end' })
+        : stl;
       return Object.assign(mod.defaults({
-        x1: a.x, y1: a.y, x2: b.x, y2: b.y,
-        style: Object.assign({}, stl, { arrow: tool === 'darrow' ? 'both' : 'end' }),
+        x1: a.x, y1: a.y, x2: b.x, y2: b.y, style,
       }), { type: mod.type });
     }
     if (type === 'line') {
@@ -64,6 +67,7 @@
       case 'line': return { type: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y, style: stl };
       case 'arrow': return { type: 'arrow', x1: a.x, y1: a.y, x2: b.x, y2: b.y, style: Object.assign({}, stl, { arrow: 'end' }) };
       case 'darrow': return { type: 'arrow', x1: a.x, y1: a.y, x2: b.x, y2: b.y, style: Object.assign({}, stl, { arrow: 'both' }) };
+      case 'ray': return { type: 'ray', x1: a.x, y1: a.y, x2: b.x, y2: b.y, style: Object.assign({}, stl, { rayArrows: 1 }) };
       case 'rect': {
         let w = b.x - a.x, h = b.y - a.y;
         if (shift) { const m = Math.max(Math.abs(w), Math.abs(h)); w = Math.sign(w || 1) * m; h = Math.sign(h || 1) * m; }

@@ -30,8 +30,8 @@
         'stroke-linecap': 'round',
         'stroke-linejoin': 'round',
       };
-      if (dash === 'dashed') out['stroke-dasharray'] = '8 5';
-      if (dash === 'dotted') out['stroke-dasharray'] = '3 4';
+      var da = DP.style.dashArray(dash);
+      if (da) out['stroke-dasharray'] = da;
       if (rs.opacity != null && rs.opacity < 1) out['stroke-opacity'] = rs.opacity;
       return out;
     }

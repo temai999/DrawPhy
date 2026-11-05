@@ -450,9 +450,16 @@
     return G.apply(M.partMatrix(o), { x: t.x, y: t.y });
   };
 
+  /* 类型是否支持端点粘附：由模块 capabilities.bind 声明（line/arrow/ray 为 true）。
+     原实现硬编码 `type === 'line' || 'arrow'`，新增光线后必然漏改，故收敛到能力位。 */
+  M.isBindable = function (o) {
+    const mod = moduleOf(o);
+    return !!(mod && mod.capabilities && mod.capabilities.bind);
+  };
+
   M.bindEndpoint = function (o, key, host, terminal) {
     if (!host || !o || host.id === o.id) return false;
-    if (o.type !== 'line' && o.type !== 'arrow') return false;
+    if (!M.isBindable(o)) return false;
     const ex = key === 'x1' ? o.x1 : o.x2;
     const ey = key === 'x1' ? o.y1 : o.y2;
     o.bind = o.bind || {};

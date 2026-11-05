@@ -106,8 +106,8 @@
   function strokeAttrs(rs, dashOverride) {
     const dash = dashOverride || rs.dash;
     let s = ` stroke="${rs.stroke}" stroke-width="${r2(rs.width)}" stroke-linecap="round" stroke-linejoin="round"`;
-    if (dash === 'dashed') s += ' stroke-dasharray="8 5"';
-    if (dash === 'dotted') s += ' stroke-dasharray="3 4"';
+    const da = DP.style.dashArray(dash);
+    if (da) s += ` stroke-dasharray="${da}"`;
     if (rs.opacity != null && rs.opacity < 1) s += ` stroke-opacity="${rs.opacity}"`;
     return s;
   }

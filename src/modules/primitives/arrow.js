@@ -29,8 +29,8 @@
         'stroke-linecap': 'round',
         'stroke-linejoin': 'round',
       };
-      if (rs.dash === 'dashed') out['stroke-dasharray'] = '8 5';
-      if (rs.dash === 'dotted') out['stroke-dasharray'] = '3 4';
+      var da = DP.style.dashArray(rs.dash);
+      if (da) out['stroke-dasharray'] = da;
       if (rs.opacity != null && rs.opacity < 1) out['stroke-opacity'] = rs.opacity;
       return out;
     }
@@ -70,7 +70,7 @@
         hint: '拖动绘制带箭头的线（力、光路）',
       },
       menu: { tab: 'draw', category: 'shape', group: 'shape', order: 30 },
-      capabilities: { fill: false, rotate: false, resize: true },
+      capabilities: { fill: false, rotate: false, resize: true, bind: true },
 
       defaults: defaults,
 

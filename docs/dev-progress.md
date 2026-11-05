@@ -293,3 +293,27 @@
 ### 验证
 - `node --check` 全部通过；逻辑 **98/98**、交互 **50/50**、历史 **23/23**、PNG 31758B。
 - `index.html?sample=1` 无异常，界面截图与阶段 5 完全一致（零视觉变化）。
+
+---
+
+## 阶段 7-a：光线工具 + 线型/线宽体系（2026-11-05，用户需求驱动）
+
+### 需求
+1. 新增「光线」：中间有箭头的实线（光学光路，区别于端点箭头的 arrow）。
+2. 线型继续丰富，补主光轴线型。
+3. 线宽改为「可选择」。
+
+### 实现
+- **线型唯一数据源 `src/core/style.js`（新）**：`DP.style.DASHES`（6 种）+ `WIDTHS`（6 档）+ `dashArray()/dashName()/isDash()/normWidth()`。12 个模块与 render.js 里各自为政的 `if (dash === 'dashed')...` 全部收敛为一次 `DP.style.dashArray()` 调用（脚本化替换，0 手改遗漏）。**新增线型从「改 14 处」变成「改 1 处」。**
+- **线型表**：solid 实线 / dashed 虚线 / dotted 点线 / **dashdot 点划线（主光轴，`14 4 3 4`）** / dashdotdot 双点划线 / longdash 长划线。dashArray 未知值安全回落实线。
+- **光线模块 `src/modules/primitives/ray.js`（新，type:'ray'）**：实线 + 中点箭头（`style.rayArrows: 1|2`，2 = 三等分双箭头）；头长随线宽（与 arrow 同公式）并被线长夹住；anchors/nodes/translate/scale/mirror 与 line 同构；capabilities 声明 `bind: true`，端点粘附/端子粘附开箱即用。工具位：基本图形组、快捷键 Y。
+- **端点粘附能力位**：`M.isBindable(o)` 读 `capabilities.bind`，替换 core.js/ui.js 里 4 处 `type === 'line' || 'arrow'` 硬编码（光线就是这类漏改的活案例）。
+- **UI**：
+  - 样式面板：线型 6 个按钮（SVG 实际 dasharray 预览，所见即所得）、线宽 6 档预设按钮、填充移入第二列；选中态随当前对象同步（markStyleBtns）。
+  - 属性面板：线宽改为「预设下拉 + 任意数值框」双通道（非预设宽度动态补选项，旧文档值不被悄悄改掉）；线型下拉 6 项；选中光线时出现「箭头：中点 1 个 / 三等分 2 个」。
+- CSS：style-grid3 改双列（3 行高不变，与部件网格对齐）、`.toolbtns button.on` 选中态。
+
+### 验证
+- `node --check` 30 个 js 全过；逻辑 **108/108**（新增 ray 5 项 + 线型/线宽 5 项）、交互 **50/50**、历史 **23/23**、PNG 31758B。
+- 截图核对：样式面板 6 线型 + 6 线宽布局正常无溢出；画布上光线中点箭头、三等分双箭头、主光轴点划线、虚线箭头均正确渲染。
+- 教训（已有先例重犯）：test.html 里用旧 Edit 删「行尾换行」把 `// 15.2` 注释与 `const ci` 合并成一行，注释吞掉声明 → 运行时 `ci is not defined`。**不要用「删换行」式 Edit。**

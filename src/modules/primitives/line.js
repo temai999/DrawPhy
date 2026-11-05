@@ -29,8 +29,8 @@
         'stroke-linecap': 'round',
         'stroke-linejoin': 'round',
       };
-      if (dash === 'dashed') out['stroke-dasharray'] = '8 5';
-      if (dash === 'dotted') out['stroke-dasharray'] = '3 4';
+      var da = DP.style.dashArray(dash);
+      if (da) out['stroke-dasharray'] = da;
       if (rs.opacity != null && rs.opacity < 1) out['stroke-opacity'] = rs.opacity;
       return out;
     }
@@ -55,7 +55,7 @@
         hint: '拖动绘制线段；Shift 锁 15°',
       },
       menu: { tab: 'draw', category: 'shape', group: 'shape', order: 20 },
-      capabilities: { fill: false, rotate: false, resize: true },
+      capabilities: { fill: false, rotate: false, resize: true, bind: true },
 
       defaults: defaults,
 

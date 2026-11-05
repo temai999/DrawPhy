@@ -117,12 +117,21 @@ button { cursor: pointer; }
   grid-auto-flow: column; grid-auto-columns: 60px;
   gap: 3px; align-content: center; height: 120px;
 }
-/* 样式面板：同样三行、总高 120，与部件网格对齐 */
+/* 样式面板：同样三行、总高 120，与部件网格对齐；
+   内容 4 组（线色/线型/线宽/填充）→ 竖向 3 行、横向第二列放填充 */
 .style-grid3 {
   display: grid; grid-template-rows: repeat(3, 38px);
-  gap: 3px; align-content: center; height: 120px;
+  grid-auto-flow: column; grid-auto-columns: max-content;
+  column-gap: 14px; gap: 3px 14px; align-content: center; height: 120px;
 }
 .style-grid3 .style-row { display: flex; align-items: center; gap: 6px; }
+/* 样式按钮选中态（线型/线宽/填充共用） */
+.toolbtns button.on {
+  background: var(--accent-weak); border-color: var(--accent);
+  color: var(--accent); font-weight: 600;
+}
+#swWidth button { width: 34px !important; font-size: 11px; }
+#swDash button svg { display: block; margin: 0 auto; }
 .rib-tools { display: flex; gap: 3px; }
 .rib-tool { width: 38px; height: 34px; }
 .rib-acts { display: flex; flex-direction: column; gap: 4px; }

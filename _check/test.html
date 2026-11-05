@@ -4,12 +4,14 @@
 <body>
 <pre id="r">running…</pre>
 <script src="../src/core/config.js"></script>
+<script src="../src/core/style.js"></script>
 <script src="../src/core/module-wrap.js"></script>
 <script src="../src/core/registry.js"></script>
 <script src="../src/core/eventbus.js"></script>
 <script src="../src/core.js"></script>
 <script src="../src/modules/primitives/rect.js"></script>
 <script src="../src/modules/primitives/arrow.js"></script>
+<script src="../src/modules/primitives/ray.js"></script>
 <script src="../src/modules/primitives/line.js"></script>
 <script src="../src/modules/primitives/circle.js"></script>
 <script src="../src/modules/primitives/ellipse.js"></script>
@@ -157,8 +159,8 @@
     // 13 阶段 2：rect / arrow 试点模块
     ok('registry 已注册 rect/arrow', DP.registry.has('rect') && DP.registry.has('arrow'),
       DP.registry.list().map(m => m.type).join(','));
-    ok('shape 菜单 8 项 / text 菜单 5 项',
-      DP.registry.menuSlots('draw', 'shape').length === 8 && DP.registry.menuSlots('draw', 'text').length === 5,
+    ok('shape 菜单 9 项 / text 菜单 5 项',
+      DP.registry.menuSlots('draw', 'shape').length === 9 && DP.registry.menuSlots('draw', 'text').length === 5,
       DP.registry.menuSlots('draw').map(s => s.type).join(','));
 
     const R = DP.registry.get('rect');
@@ -195,9 +197,9 @@
     ok('arrow 模块吸附锚点', apts.length === 3 && apts[1].type === '端点' && apts[2].type === '中点',
       apts.map(p => p.type).join('/'));
 
-    // 15 阶段 3 / 4：图元模块全量覆盖（13 个）
-    const MODS = ['rect', 'arrow', 'line', 'circle', 'ellipse', 'polyline', 'arc', 'path', 'text', 'textbox', 'callout', 'dim', 'angle'];
-    ok('13 个图元模块全部注册', MODS.every(t => DP.registry.has(t)),
+    // 15 阶段 3 / 4 / 7：图元模块全量覆盖（14 个）
+    const MODS = ['rect', 'arrow', 'ray', 'line', 'circle', 'ellipse', 'polyline', 'arc', 'path', 'text', 'textbox', 'callout', 'dim', 'angle'];
+    ok('14 个图元模块全部注册', MODS.every(t => DP.registry.has(t)),
       MODS.filter(t => !DP.registry.has(t)).join(',') || 'all-ok');
     ok('全部模块声明 version/meta/defaults/bbox/hitTest/render',
       MODS.every(t => {
@@ -221,6 +223,37 @@
       [lnMod.x1, lnMod.y1, lnMod.x2, lnMod.y2].join(','));
     ok('line 模块 drawable 渲染', DP.render.object(lnMod).indexOf('<line') === 0 &&
       parseSvg('<svg xmlns="http://www.w3.org/2000/svg">' + DP.render.object(lnMod) + '</svg>'));
+
+    // 15.1b 光线 ray：实线 + 中点箭头（阶段 7）
+    const ray = { type: 'ray', x1: 0, y1: 0, x2: 100, y2: 0, style: Object.assign({}, DP.state.style, { rayArrows: 1 }) };
+    const raySvg = DP.render.object(ray);
+    ok('ray 已注册且声明 bind 能力',
+      DP.registry.has('ray') && DP.registry.get('ray').capabilities.bind === true);
+    ok('ray 渲染 1 条线 + 1 个箭头',
+      (raySvg.match(/<line/g) || []).length === 1 && (raySvg.match(/<polygon/g) || []).length === 1,
+      raySvg.slice(0, 90));
+    /* 头长 = max(7, width*4.2) = 8.4；尖端 = 中点 + 头长/2 = 54.2 */
+    const rayTip = /points="([-\d.]+) ([-\d.]+)/.exec(raySvg);
+    ok('ray 箭头骑在中点', rayTip && Math.abs(+rayTip[1] - 54.2) < 0.2 && Math.abs(+rayTip[2]) < 0.01,
+      rayTip && rayTip[1]);
+    const ray2 = Object.assign({}, ray, { style: Object.assign({}, ray.style, { rayArrows: 2 }) });
+    ok('ray 支持三等分双箭头', (DP.render.object(ray2).match(/<polygon/g) || []).length === 2);
+    ok('ray 可端点粘附，rect 不可',
+      DP.model.isBindable(ray) && !DP.model.isBindable({ type: 'rect', x: 0, y: 0, w: 10, h: 10 }));
+
+    // 15.1c 线型表（含主光轴）与线宽（阶段 7）
+    ok('线型表含主光轴点划线', DP.style.dashArray('dashdot') === '14 4 3 4' && DP.style.DASHES.length >= 6,
+      DP.style.DASHES.map(d => d.id).join(','));
+    ok('未知线型安全回落实线', DP.style.dashArray('nope') === '' && DP.style.dashArray(undefined) === '');
+    const dashLine = { type: 'line', x1: 0, y1: 0, x2: 10, y2: 0,
+      style: Object.assign({}, DP.state.style, { dash: 'dashdot' }) };
+    ok('主光轴线型写入 stroke-dasharray', DP.render.object(dashLine).indexOf('stroke-dasharray="14 4 3 4"') > 0);
+    const wLine = { type: 'line', x1: 0, y1: 0, x2: 10, y2: 0,
+      style: Object.assign({}, DP.state.style, { width: 1.5 }) };
+    ok('线宽写入渲染属性', DP.render.object(wLine).indexOf('stroke-width="1.5"') > 0);
+    ok('线宽规范化（脏值回落默认 2、上限 24）',
+      DP.style.normWidth(0) === 2 && DP.style.normWidth('x') === 2 && DP.style.normWidth(9) === 9 &&
+      DP.style.normWidth(99) === 24);
 
     // 15.2 circle / ellipse
     const ci = { type: 'circle', cx: 10, cy: 10, r: 5, style: DP.state.style };

@@ -161,6 +161,15 @@
       let list = TOOLS.filter((t) => t.g === key);
       inner = `<div class="part-grid3">${list.map(toolBtn).join('')}</div>`;
     } else if (key === 'style') {
+      /* 线型/线宽一律从 DP.style 取（唯一数据源）：新增线型只改 core/style.js */
+      const dashBtns = DP.style.DASHES.map((d) => {
+        const da = d.pattern ? ` stroke-dasharray="${d.pattern}"` : '';
+        return `<button data-d="${d.id}" title="${d.name}（${d.hint}）"${
+          d.id === st.style.dash ? ' class="on"' : ''
+        }><svg viewBox="0 0 34 10" width="28" height="9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="1" y1="5" x2="33" y2="5"${da}/></svg></button>`;
+      }).join('');
+      const widthBtns = DP.style.WIDTHS.map((w) =>
+        `<button data-w="${w}" title="线宽 ${w}"${+st.style.width === w ? ' class="on"' : ''}>${w}</button>`).join('');
       inner = `<div class="style-grid3">
         <div class="style-row">
           <span class="style-label">线色</span>
@@ -181,11 +190,11 @@
         </div>
         <div class="style-row">
           <span class="style-label">线型</span>
-          <span class="toolbtns" id="swDash">
-            <button data-d="solid" title="实线">━</button>
-            <button data-d="dashed" title="虚线">╌</button>
-            <button data-d="dotted" title="点线">┄</button>
-          </span>
+          <span class="toolbtns" id="swDash">${dashBtns}</span>
+        </div>
+        <div class="style-row">
+          <span class="style-label">线宽</span>
+          <span class="toolbtns" id="swWidth">${widthBtns}</span>
         </div>
         <div class="style-row">
           <span class="style-label">填充</span>
@@ -238,12 +247,24 @@
     if (bgCk) bgCk.checked = st.page.grid !== false;
     if (snCk) snCk.checked = st.snap.anchors !== false;
     bindPartButtons(el);
+    /* 样式按钮的选中态随当前对象/全局样式同步（线型 6 项、线宽 6 档） */
+    const markStyleBtns = () => {
+      const cur = (DP.sel.list()[0] || {}).style || st.style;
+      el.querySelectorAll('#swDash button').forEach((b) => b.classList.toggle('on', b.dataset.d === cur.dash));
+      el.querySelectorAll('#swWidth button').forEach((b) => b.classList.toggle('on', +b.dataset.w === +cur.width));
+      el.querySelectorAll('#swFill button').forEach((b) =>
+        b.classList.toggle('on', (b.dataset.f || 'none') === (cur.fill || 'none')));
+    };
+    const applyAndMark = (patch) => { applyStyle(patch); markStyleBtns(); };
     el.querySelectorAll('#swStroke i').forEach((s) =>
-      s.addEventListener('click', () => applyStyle({ stroke: s.dataset.c })));
+      s.addEventListener('click', () => applyAndMark({ stroke: s.dataset.c })));
     el.querySelectorAll('#swDash button').forEach((b) =>
-      b.addEventListener('click', () => applyStyle({ dash: b.dataset.d })));
+      b.addEventListener('click', () => applyAndMark({ dash: b.dataset.d })));
+    el.querySelectorAll('#swWidth button').forEach((b) =>
+      b.addEventListener('click', () => applyAndMark({ width: +b.dataset.w })));
     el.querySelectorAll('#swFill button').forEach((b) =>
-      b.addEventListener('click', () => applyStyle({ fill: b.dataset.f })));
+      b.addEventListener('click', () => applyAndMark({ fill: b.dataset.f })));
+    markStyleBtns();
     const customInput = el.querySelector('#customColor');
     let saved = [];
     try { saved = JSON.parse(localStorage.getItem('drawphy.customColors') || '[]'); } catch (_) {}
@@ -501,7 +522,7 @@
   };
 
   const CURSORS = {
-    select: 'default', line: 'crosshair', arrow: 'crosshair', darrow: 'crosshair', polyline: 'crosshair',
+    select: 'default', line: 'crosshair', arrow: 'crosshair', ray: 'crosshair', darrow: 'crosshair', polyline: 'crosshair',
     polygon: 'crosshair', rect: 'crosshair', ellipse: 'crosshair', circle: 'crosshair',
     arc: 'crosshair', freehand: 'crosshair', text: 'text', dim: 'crosshair',
     angle: 'crosshair', trim: 'crosshair', eraser: 'crosshair', fill: 'crosshair', part: 'copy',
@@ -1069,8 +1090,8 @@
       return;
     }
 
-    // 线条类：line / arrow / darrow —— 左键点击定起点，再点击定终点（也支持按住拖拽）
-    if (tool === 'line' || tool === 'arrow' || tool === 'darrow') {
+    // 线条类：line / arrow / ray / darrow —— 左键点击定起点，再点击定终点（也支持按住拖拽）
+    if (tool === 'line' || tool === 'arrow' || tool === 'ray' || tool === 'darrow') {
       if (D && D.mode === 'line2' && D.waiting) {
         // 第二下：定终点
         const end = p;
@@ -1338,7 +1359,7 @@
       if (G.dist(a, b) > 3 / st.view.k) {
         const shape = createShape(D.tool, a, b, D.pts);
         /* 端点落在别的对象锚点上 → 自动粘附 */
-        if (shape && (shape.type === 'line' || shape.type === 'arrow')) {
+        if (shape && M.isBindable(shape)) {
           if (D.startOid) {
             const host = st.objects.find((o) => o.id === D.startOid && o !== shape);
             if (host && M.bindEndpoint(shape, 'x1', host, D.startTerminal)) U.toast('起点已粘附到对象，移动它时线会跟随');
@@ -1369,7 +1390,7 @@
     }
     if (D.mode === 'node') {
       if (D.moved) { DP.history.push(); autosave(); }
-      if (D.snapOid && (D.obj.type === 'line' || D.obj.type === 'arrow')) {
+      if (D.snapOid && M.isBindable(D.obj)) {
         const host = st.objects.find((x) => x.id === D.snapOid);
         if (host && M.bindEndpoint(D.obj, D.key, host, D.snapTerminal)) {
           U.toast('已粘附：移动该对象时，端点会跟着走');
@@ -1958,14 +1979,20 @@
     const sel = DP.sel.list();
     const stl = sel.length ? sel[0].style : st.style;
     const s = stl || st.style;
+    /* 线宽/线型下拉同样由 DP.style 生成；文档里的非预设线宽追加一项，避免打开旧文件时值被悄悄改掉 */
+    const curW = +s.width || DP.config.defaults.strokeWidth;
+    const wList = DP.style.WIDTHS.slice();
+    if (wList.indexOf(curW) < 0) wList.push(curW);
+    wList.sort((a, b) => a - b);
+    const widthOpts = wList.map((w) =>
+      `<option value="${w}"${w === curW ? ' selected' : ''}>${w}</option>`).join('');
+    const dashOpts = (DP.style.isDash(s.dash) ? '' : `<option value="${s.dash}" selected>${s.dash || '实线'}</option>`) +
+      DP.style.DASHES.map((d) => `<option value="${d.id}"${s.dash === d.id ? ' selected' : ''}>${d.name}</option>`).join('');
     const common = `
       <div class="row"><label>线色</label><input type="color" id="pStroke" value="${s.stroke}"></div>
-      <div class="row"><label>线宽</label><input type="range" id="pWidth" min="0.5" max="8" step="0.5" value="${s.width}"><span id="pWidthVal">${s.width}</span></div>
-      <div class="row"><label>线型</label><select id="pDash">
-        <option value="solid"${s.dash === 'solid' ? ' selected' : ''}>实线</option>
-        <option value="dashed"${s.dash === 'dashed' ? ' selected' : ''}>虚线</option>
-        <option value="dotted"${s.dash === 'dotted' ? ' selected' : ''}>点线</option>
-      </select></div>
+      <div class="row"><label>线宽</label><select id="pWidth" title="可选预设；也可直接在数值框输入">${widthOpts}</select>
+        <input type="number" id="pWidthNum" min="0.25" max="24" step="0.25" value="${curW}"></div>
+      <div class="row"><label>线型</label><select id="pDash">${dashOpts}</select></div>
       <div class="row"><label>填充</label><input type="color" id="pFill" value="${s.fill && s.fill !== 'none' ? s.fill : '#ffffff'}">
         <button class="mini" id="pFillNone">无</button></div>
       <div class="row"><label>字号</label><input type="number" id="pFontSize" min="8" max="120" value="${s.fontSize || 18}"></div>
@@ -1982,6 +2009,13 @@
       if (sel.length === 1 && sel[0].type === 'dim') {
         extra = `<div class="row"><label>标注</label><input type="text" id="pDimLabel" value="${sel[0].label || ''}" placeholder="${sel[0].value ?? ''}"></div>`;
       }
+      if (sel.length === 1 && sel[0].type === 'ray') {
+        const n = (sel[0].style && sel[0].style.rayArrows) === 2 ? 2 : 1;
+        extra = `<div class="row"><label>箭头</label><select id="pRayCount">
+          <option value="1"${n === 1 ? ' selected' : ''}>中点 1 个</option>
+          <option value="2"${n === 2 ? ' selected' : ''}>三等分 2 个</option>
+        </select></div>`;
+      }
       if (sel.length === 1 && sel[0].type === 'part') {
         const def = DP.parts.byId[sel[0].partId];
         const terms = (def && def.terminals) || [];
@@ -1992,7 +2026,7 @@
           <button class="mini" data-rot="-90">-90°</button><button class="mini" data-rot="90">+90°</button>
           <button class="mini" data-flip="1">翻转</button></div>${tHtml}`;
       }
-      if (sel.length === 1 && (sel[0].type === 'line' || sel[0].type === 'arrow')) {
+      if (sel.length === 1 && M.isBindable(sel[0])) {
         const b = sel[0].bind || {};
         const desc = [];
         ['x1', 'x2'].forEach((k) => {
@@ -2049,10 +2083,23 @@
       if (el) el.addEventListener(ev, fn);
     };
     on('pStroke', 'input', (e) => apply((o) => { (o.style || st.style).stroke = e.target.value; if (!sel.length) st.style.stroke = e.target.value; }));
-    on('pWidth', 'input', (e) => {
-      const v = +e.target.value;
-      box.querySelector('#pWidthVal').textContent = v;
+    on('pWidth', 'change', (e) => {
+      const v = DP.style.normWidth(e.target.value);
       apply((o) => { (o.style || st.style).width = v; });
+      const num = box.querySelector('#pWidthNum');
+      if (num) num.value = v;
+    });
+    on('pWidthNum', 'change', (e) => {
+      const v = DP.style.normWidth(e.target.value);
+      e.target.value = v;
+      apply((o) => { (o.style || st.style).width = v; });
+      /* 非预设宽度：就地补一项，保证下拉不显示「空白」 */
+      const selW = box.querySelector('#pWidth');
+      if (selW) {
+        let opt = Array.prototype.slice.call(selW.options).find((x) => +x.value === v);
+        if (!opt) { opt = new Option(String(v), String(v)); selW.add(opt); }
+        selW.value = String(v);
+      }
     });
     on('pDash', 'change', (e) => apply((o) => { (o.style || st.style).dash = e.target.value; }));
     on('pFill', 'input', (e) => apply((o) => { (o.style || st.style).fill = e.target.value; }));
@@ -2064,6 +2111,10 @@
     on('pDimLabel', 'change', (e) => {
       const v = e.target.value;
       apply((o) => { if (o.type === 'dim') o.label = v; });
+    });
+    on('pRayCount', 'change', (e) => {
+      const v = +e.target.value === 2 ? 2 : 1;
+      apply((o) => { (o.style || st.style).rayArrows = v; });
     });
     on('pageW', 'change', (e) => { st.page.w = Math.max(200, +e.target.value || 1240); U.render(); });
     on('pageH', 'change', (e) => { st.page.h = Math.max(200, +e.target.value || 820); U.render(); });

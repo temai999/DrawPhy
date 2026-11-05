@@ -26,10 +26,11 @@ DrawPhy 是物理教学用科学绘图板：对标亿图（EE），纯静态网�
 
 ```
 DrawPhy/
-├─ index.html                  # 唯一入口。骨架 + 23 个 <script>（顺序=依赖，不许乱序）
+├─ index.html                  # 唯一入口。骨架 + 25 个 <script>（顺序=依赖，不许乱序）
 ├─ src/
 │  ├─ core/
 │  │  ├─ config.js             # DP.config：默认样式常量
+│  │  ├─ style.js              # DP.style：线型表 DASHES / 线宽表 WIDTHS / dashArray()（唯一数据源）
 │  │  ├─ module-wrap.js        # DP.defineModule(type, factory)：模块定义入口
 │  │  ├─ registry.js           # DP.registry：三表（shapes/menu/parts）+ 版本守卫
 │  │  └─ eventbus.js           # DP.bus：发布订阅（当前零订阅，阶段 6 启用）
@@ -39,7 +40,7 @@ DrawPhy/
 │  ├─ parts.js                 # 114 个参数化部件定义（DP.parts.byId）
 │  ├─ io.js                    # 导出 PNG/SVG/JSON + ?sample=1 示例图
 │  └─ func.js                  # DP.compileFunc：函数图像表达式编译
-│  └─ modules/primitives/      # 13 个已迁移图元模块（见第 4 节）
+│  └─ modules/primitives/      # 14 个已迁移图元模块（含 ray 光线，见第 4 节）
 ├─ _check/
 │  ├─ test.html                # 逻辑自检（无头 Chrome 跑），当前 83 项
 │  ├─ interact.html            # 交互自检（合成 PointerEvent），当前 47 项
@@ -50,7 +51,7 @@ DrawPhy/
 └─ assets/                     # 图标等静态资源
 ```
 
-**脚本加载顺序（index.html 第 103-125 行）**：core/* 四件 → core.js → 13 个模块 → func.js → parts.js → render.js → ui.js → io.js。
+**脚本加载顺序（index.html）**：core/* 五件（config → style → module-wrap → registry → eventbus）→ core.js → 14 个模块 → func.js → parts.js → render.js → ui.js → io.js。
 新模块脚本**插在 core.js 之后、func.js 之前**；测试页 `_check/test.html` 有同样的脚本块，**两边必须同步加**（漏加 = 测试页白跑，发生过）。
 
 ## 3. 数据模型（最重要的一节）
@@ -84,6 +85,8 @@ DP.state = {
 ```
 
 `bind` 规则：`{端点key: {id: 宿主id, dx, dy}}`，dx/dy 是**相对宿主包围盒中心**的偏移。宿主移动/缩放时 `DP.model.applyBindings()` 让导线跟随。**不要发明新的绑定格式。**
+
+`style.dash` 的合法值与 `style.width` 的预设都定义在 `src/core/style.js`（DP.style），当前线型：solid / dashed / dotted / **dashdot（点划线=主光轴）** / dashdotdot / longdash。**新增线型只改 style.js 一处**，模块渲染、SVG 导出、样式面板、属性下拉会全部自动生效——禁止在模块里手写 `if (dash === 'xxx')`。光线（type:'ray'）另有 `style.rayArrows: 1|2` 控制中间箭头个数。
 
 ### 3.3 文档序列化
 
@@ -135,6 +138,12 @@ if (mod && mod.translate) { mod.translate(o, dx, dy); } else { /* 旧 switch 分
 ```
 
 **你新增/修改模块时只需保证模块本身正确**，分派层不许动。
+
+### 4.4 线型 / 线宽 / 端点粘附能力位（阶段 7 起强制）
+
+- **线型**：唯一来源 `src/core/style.js`。模块渲染一律 `DP.style.dashArray(dash)`，UI 按钮与属性下拉一律遍历 `DP.style.DASHES`。`dashdot`（点划线）是光学主光轴的教材画法，别改名。
+- **线宽**：预设 `DP.style.WIDTHS`（0.75/1/1.5/2/3/4），样式面板按钮 + 属性面板下拉；非预设值由 `DP.style.normWidth()` 兜底（脏值回落 2，上限 24）。
+- **端点粘附**：模块在 `capabilities` 里声明 `bind: true`（line/arrow/ray 已声明），核心与 UI 一律用 `M.isBindable(o)` 判断。**禁止再写 `type === 'line' || type === 'arrow'` 这类硬编码**——光线就是漏改案例。
 
 ## 5. 标准任务手册
 
@@ -210,7 +219,7 @@ if (mod && mod.translate) { mod.translate(o, dx, dy); } else { /* 旧 switch 分
 ```bash
 cd "D:/Trae CN/myPro/DrawPhy"
 
-# 1) 语法检查（22 个 js 全过）
+# 1) 语法检查（30 个 js 全过）
 for f in $(find src -name "*.js"); do node --check "$f" || echo "SYNTAX FAIL $f"; done
 
 # 2) 逻辑自检（期望 TOTAL=83 FAIL=0，你新增断言后数字变大）
