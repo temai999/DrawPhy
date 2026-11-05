@@ -452,3 +452,15 @@
 ### 验证
 - 逻辑 **140/140**（+13：圆切直线/弧切割者过滤/无交点理由/剪圆成弧/圆切圆/剪弧两段与端头/id 沿用）、交互 **97/97**（+5：UI 剪圆成弧、角度归一、弧再剪两段、空白不误删）、历史 23/23、PNG 31758B。
 - 截图核对：十字线圆剪掉右上象限、弦上圆剪掉弦至顶中段，切割线完整。
+
+## 阶段 8-c：图层——显隐/锁定/当前层（2026-11-05）
+
+### 实现
+- **core.js**：`state.layers/currentLayer`；`M.layerId/layerDef/layerVisible/layerLocked/stampLayer/layerObjects` + `layerAdd/layerRemove（只删空层）/layerToggle/layerRename/layerSetCurrent/layerPruneSelection`。对象缺 `o.layer` 视作第一层（旧文件零迁移）；toJSON/fromJSON 带图层并兼容旧档。
+- **消费点过滤**：渲染导出（R.objects）、点选/框选、橡皮、修剪目标、吸附（collectPoints/intersections）、破口接线（findInsertWire）；隐藏=不可见不导出，锁定=不可编辑但吸附保留；切换后清理幽灵选择。
+- **创建打戳**：仅绘制创建点 stampLayer（createShape / finishOrtho / finishBez / finishPoly / arc / dim / angle / point / text / objFromModule / 部件放置）；粘贴、Alt 复制、修剪件沿用来源。
+- **ui.js 图层面板**：属性面板顶部「图层」区——行点击设当前层、双击改名、显隐/锁定切换、空层删除、新建；editor.css 新增样式。`U.renderProps` 导出。
+
+### 验证
+- 逻辑 **155/155**（+15）、交互 **103/103**（+6：layer 戳、面板渲染、隐藏不渲染+清选择、锁定不可选/解锁可选）、历史 23/23、PNG 31758B。
+- 截图核对：两行图层（当前高亮、计数正确、眼睛/锁按钮）、画布正常。

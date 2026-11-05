@@ -174,6 +174,13 @@ if (mod && mod.translate) { mod.translate(o, dx, dy); } else { /* 旧 switch 分
 - **圆/弧目标**：把每个交点换算成沿弧位置 `u = ((角 - base) % 360 + 360) % 360 ∈ [0, span]`（circle 的 base=0/span=360，arc 用自身 a0/a1），剪掉点击 `u0` 所在区间。余弧区间：**整圆 → 环绕单弧**（`hi>=span` 时归一为 `[0, lo]`，避免 a0 超过 360°）；**弧 → 端头一段或两段**。角度容差 0.4°，防浮点毛刺。
 - **新切割者类型**只需在 `trimSegsOf`（线段集）或 `trimCircleOf`（圆集，arc 带 `arc` 字段过滤角范围）加一个分支。
 
+### 4.9 图层：`M.layer*` API 与消费点过滤（阶段 8-c）
+
+- **数据**：`state.layers = [{ id, name, visible, locked }]` + `state.currentLayer`。对象 `o.layer === undefined` 一律视作第一层——**旧文件/旧对象零迁移兼容**，fromJSON 缺 `layers` 字段保持默认层。
+- **core API**：`M.layerId/layerDef/layerVisible/layerLocked/stampLayer/layerObjects` + 操作 `layerAdd/layerRemove（只删空层，至少留一层）/layerToggle/layerRename/layerSetCurrent/layerPruneSelection`。`stampLayer` 只在**绘制创建点**调用（createShape、各 finish*、textbox/callout 的 objFromModule、point/dim/angle/text、部件放置）；粘贴/修剪件/复制沿用来源 layer，**不要给它们打戳**。
+- **消费点过滤**（新增图形行为时逐一对齐）：渲染与导出（render.js `R.objects`）、点选命中与框选（ui.js `hitTest`/marquee）、橡皮、修剪目标、吸附点/交点（core `S.collectPoints/S.intersections`）、破口接线（`M.findInsertWire`）。规则：**隐藏=不渲染不导出不命中不吸附；锁定=只是不可编辑（命中/框选/橡皮/修剪全部跳过），吸附保留**。切换显隐/锁定后要 `layerPruneSelection()` 清掉幽灵选择（ui.js `bindLayers` 的 refresh 已做）。
+- **面板**：renderProps 里 `layersHtml()` + `bindLayers()`；行点击设当前层、双击改名、眼睛点显隐、锁点锁定、空层出现 ×、底部新建。`U.renderProps` 已导出（自动化触发用）。
+
 ## 5. 标准任务手册
 
 ### 5.1 新增一个图元类型（12 步）

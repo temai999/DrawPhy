@@ -1134,6 +1134,8 @@
     const pad = tol + 4;
     for (let i = st.objects.length - 1; i >= 0; i--) {
       const o = st.objects[i];
+      /* 隐藏图层不可见不可选；锁定图层不可编辑 */
+      if (!M.layerVisible(o) || M.layerLocked(o)) continue;
       const bb = M.localBBox(o);
       if (bb.w > 0 || bb.h > 0) {
         if (p.x < bb.x - pad || p.x > bb.x + bb.w + pad || p.y < bb.y - pad || p.y > bb.y + bb.h + pad) continue;
@@ -1393,10 +1395,10 @@
         const a1 = G.deg(Math.atan2(p.y - D.cy, p.x - D.cx));
         const [n0, n1] = G.normArc(D.a0, a1);
         DP.history.push();
-        st.objects.push({
+        st.objects.push(M.stampLayer({
           id: M.uid('a'), type: 'arc', cx: D.cx, cy: D.cy, r: Math.max(1, D.r), a0: n0, a1: n1,
           style: M.clone(st.style),
-        });
+        }));
         D = null;
         afterChange();
         return;
@@ -1411,11 +1413,11 @@
       } else {
         const len = G.dist(D.a, p);
         DP.history.push();
-        st.objects.push({
+        st.objects.push(M.stampLayer({
           id: M.uid('d'), type: 'dim', x1: D.a.x, y1: D.a.y, x2: p.x, y2: p.y,
           offset: -26, value: Math.round(len), unit: '', size: 14,
           style: M.clone(st.style),
-        });
+        }));
         D = null;
         afterChange();
         return;
@@ -1435,10 +1437,10 @@
         const a1 = G.deg(Math.atan2(p.y - D.cy, p.x - D.cx));
         const [n0, n1] = G.normArc(D.a0, a1);
         DP.history.push();
-        st.objects.push({
+        st.objects.push(M.stampLayer({
           id: M.uid('ag'), type: 'angle', cx: D.cx, cy: D.cy, r: D.r, a0: n0, a1: n1, size: 14,
           style: M.clone(st.style),
-        });
+        }));
         D = null;
         afterChange();
         return;
@@ -1512,10 +1514,10 @@
     // 点工具：单击放置
     if (tool === 'point') {
       DP.history.push();
-      st.objects.push({
+      st.objects.push(M.stampLayer({
         id: M.uid('p'), type: 'point', x: p.x, y: p.y, r: 3.5,
         style: M.clone(st.style),
-      });
+      }));
       afterChange();
       return;
     }
@@ -1937,6 +1939,7 @@
         /* EE 约定：从左往右拉 = 完全框住才选；从右往左拉 = 碰到即选 */
         const forward = D.start.x < D.cur.x;
         for (const o of st.objects) {
+          if (!M.layerVisible(o) || M.layerLocked(o)) continue; /* 隐藏/锁定图层不入框选 */
           const bb = M.localBBox(o);
           const hit = forward
             ? (bb.x >= x1 && bb.x + bb.w <= x2 && bb.y >= y1 && bb.y + bb.h <= y2)
@@ -2074,10 +2077,10 @@
     pts = simplifyOrtho(pts);
     if (pts.length >= 2) {
       DP.history.push();
-      st.objects.push({
+      st.objects.push(M.stampLayer({
         id: M.uid('ol'), type: 'polyline', points: pts, closed: false,
         style: M.clone(D.style || st.style),
-      });
+      }));
     }
     D = null;
     afterChange();
@@ -2101,7 +2104,7 @@
       style: M.clone(D.style || st.style),
     };
     DP.history.push();
-    st.objects.push(obj);
+    st.objects.push(M.stampLayer(obj));
     st.selection = new Set([obj.id]);
     D = null;
     afterChange();
@@ -2120,10 +2123,10 @@
     }
     if (pts.length >= (closed ? 3 : 2)) {
       DP.history.push();
-      st.objects.push({
+      st.objects.push(M.stampLayer({
         id: M.uid('pl'), type: 'polyline', points: pts, closed,
         style: M.clone(D.style || st.style),
-      });
+      }));
     }
     D = null;
     afterChange();
@@ -2193,6 +2196,7 @@
     o.id = M.uid(prefix || type.slice(0, 2));
     o.type = o.type || type;
     o.style = M.clone(st.style);
+    M.stampLayer(o);
     return o;
   }
 
@@ -2235,11 +2239,11 @@
     let seg = [];
     const flush = () => {
       if (seg.length > 1) {
-        st.objects.push({
+        st.objects.push(M.stampLayer({
           id: M.uid('fn'), type: 'polyline',
           points: seg.map((p) => [G.round(p[0]), G.round(p[1])]),
           closed: false, style: M.clone(stl),
-        });
+        }));
       }
       seg = [];
     };
@@ -2256,6 +2260,7 @@
     const shape = shapeFrom(tool, a, b, pts, stl, false);
     if (!shape) return null;
     DP.history.push();
+    M.stampLayer(shape);
     shape.id = M.uid(shape.type.slice(0, 2));
     st.objects.push(shape);
     if (tool === 'freehand') DP.sel.set([shape.id]);
@@ -2280,8 +2285,10 @@
     const tol = 10 / st.view.k;
     let removed = false;
     for (let i = st.objects.length - 1; i >= 0; i--) {
-      if (hitObject(st.objects[i], p, tol)) {
-        st.selection.delete(st.objects[i].id);
+      const o = st.objects[i];
+      if (!M.layerVisible(o) || M.layerLocked(o)) continue; /* 隐藏/锁定图层不擦除 */
+      if (hitObject(o, p, tol)) {
+        st.selection.delete(o.id);
         st.objects.splice(i, 1);
         removed = true;
       }
@@ -2296,6 +2303,7 @@
     for (let i = st.objects.length - 1; i >= 0; i--) {
       const o = st.objects[i];
       if (o.type !== 'line' && o.type !== 'circle' && o.type !== 'arc') continue;
+      if (!M.layerVisible(o) || M.layerLocked(o)) continue;   /* 隐藏/锁定图层不可修剪 */
       if (hitObject(o, p, tol)) { target = o; break; }
     }
     if (!target) { U.toast('修剪支持直线、圆和圆弧（请对准线条点击）'); return; }
@@ -2382,10 +2390,10 @@
     }
     if (!val) { U.render(); return; }
     DP.history.push();
-    st.objects.push({
+    st.objects.push(M.stampLayer({
       id: M.uid('t'), type: 'text', x: e.p.x, y: e.p.y, text: val,
       size: e.size, anchor: 'start', style: M.clone(st.style),
-    });
+    }));
     afterChange();
   }
 
@@ -2608,6 +2616,69 @@
   };
 
   /* ------------------------------ 属性面板 ------------------------------ */
+  /* 图层面板（阶段 8-c）：显隐 / 锁定 / 当前层 / 新建 / 空层删除 / 双击改名 */
+  function layersHtml() {
+    const rows = st.layers.map((l) => {
+      const n = M.layerObjects(l.id).length;
+      const cur = st.currentLayer === l.id;
+      const name = DP.render.escape(l.name);
+      return `<div class="layer-row${cur ? ' cur' : ''}${l.visible === false ? ' hid' : ''}"
+        data-lycur="${l.id}" title="${cur ? '当前图层：新建对象归入' : '点击设为当前图层（双击改名）'}">
+        <button class="ly-ic${l.visible === false ? ' off' : ''}" data-lyvis="${l.id}" title="${l.visible === false ? '显示该层' : '隐藏该层'}">●</button>
+        <button class="ly-ic${l.locked ? ' on' : ''}" data-lylock="${l.id}" title="${l.locked ? '解锁该层' : '锁定该层（不可编辑）'}">${l.locked ? '锁' : '开'}</button>
+        <span class="ly-name">${name}</span><span class="ly-n">${n}</span>
+        ${st.layers.length > 1 && n === 0 ? `<button class="ly-ic ly-del" data-lydel="${l.id}" title="删除空图层">×</button>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="props-sub">图层</div><div class="layers">${rows}</div>
+      <button class="mini ly-add" data-lyadd="1">＋ 新建图层</button>`;
+  }
+  function bindLayers(box) {
+    const refresh = () => { M.layerPruneSelection(); autosave(); U.render(); renderProps(); };
+    box.querySelectorAll('[data-lyvis]').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      DP.history.push();
+      M.layerToggle(b.dataset.lyvis, 'visible');
+      refresh();
+    }));
+    box.querySelectorAll('[data-lylock]').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      DP.history.push();
+      M.layerToggle(b.dataset.lylock, 'locked');
+      refresh();
+    }));
+    box.querySelectorAll('[data-lydel]').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      DP.history.push();
+      if (!M.layerRemove(b.dataset.lydel)) U.toast('只能删除空的图层');
+      refresh();
+    }));
+    box.querySelectorAll('[data-lycur]').forEach((r) => {
+      r.addEventListener('click', () => {
+        DP.history.push();
+        M.layerSetCurrent(r.dataset.lycur);
+        autosave();
+        renderProps();
+      });
+      r.addEventListener('dblclick', () => {
+        const l = st.layers.find((x) => x.id === r.dataset.lycur);
+        const name = window.prompt('图层名称：', (l && l.name) || '');
+        if (!name) return;
+        DP.history.push();
+        M.layerRename(r.dataset.lycur, name.trim());
+        autosave();
+        renderProps();
+      });
+    });
+    const add = box.querySelector('[data-lyadd]');
+    if (add) add.addEventListener('click', () => {
+      DP.history.push();
+      M.layerAdd();
+      autosave();
+      renderProps();
+    });
+  }
+
   function renderProps() {
     const box = document.getElementById('props');
     const sel = DP.sel.list();
@@ -2636,6 +2707,7 @@
       box.innerHTML = `<div class="props-title">画布</div>
         <div class="row"><label>宽</label><input type="number" id="pageW" value="${st.page.w}"><label>高</label><input type="number" id="pageH" value="${st.page.h}"></div>
         ${common}
+        ${layersHtml()}
         <p class="tip">未选中对象。选择工具为「选」，点击图形可选中。</p>`;
     } else {
       const bb = M.bbox(sel);
@@ -2683,6 +2755,7 @@
         <div class="kv"><span>X</span><b>${G.round(bb.x)}</b><span>Y</span><b>${G.round(bb.y)}</b>
           <span>W</span><b>${G.round(bb.w)}</b><span>H</span><b>${G.round(bb.h)}</b></div>
         ${common}${extra}
+        ${layersHtml()}
         <div class="grid2">
           <button class="mini" data-layer="top">置顶</button>
           <button class="mini" data-layer="bottom">置底</button>
@@ -2776,7 +2849,9 @@
       sel.forEach((o) => { o.flip = !o.flip; });
       afterChange();
     });
+    bindLayers(box);
   }
+  U.renderProps = renderProps; /* 供自动化/测试触发面板重建 */
 
   /* ------------------------------ 提示 / 存储 ------------------------------ */
   let toastTimer = null;

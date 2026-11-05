@@ -632,6 +632,52 @@
       ok('剪弧：点端头删一段', ra2.pieces && ra2.pieces.length === 1 && ra2.pieces[0].a0 === 0 && Math.abs(ra2.pieces[0].a1 - 150) < 0.01,
         ra2.reason || (ra2.pieces[0] && ra2.pieces[0].a0 + '~' + ra2.pieces[0].a1));
     })();
+
+    /* ---- 阶段 8-c：图层（M.layer* 纯逻辑） ---- */
+    (function () {
+      const T = DP.model, S = DP.state;
+      /* 旧对象缺 layer 字段 → 归第一层 */
+      const legacy = { type: 'rect', x: 0, y: 0, w: 10, h: 10 };
+      ok('图层：缺省归第一层', T.layerId(legacy) === S.layers[0].id, T.layerId(legacy));
+      ok('图层：缺省可见未锁', T.layerVisible(legacy) && !T.layerLocked(legacy));
+
+      /* 新建/当前层/打戳 */
+      const l2 = T.layerAdd('辅助层');
+      ok('图层：新建并设为当前', !!l2 && S.currentLayer === l2.id, l2 && l2.id);
+      const st1 = T.stampLayer({ type: 'circle', cx: 0, cy: 0, r: 5 });
+      ok('图层：新对象打上当前层', st1.layer === l2.id, st1.layer);
+      const st2 = T.stampLayer({ type: 'line', x1: 0, y1: 0, x2: 1, y2: 1, layer: 'L1' });
+      ok('图层：已有 layer 不覆盖', st2.layer === 'L1');
+
+      /* 显隐/锁定切换 + 选择清理 */
+      legacy.id = 'lg1'; st1.id = 'st1';
+      S.objects = [legacy, st1];
+      S.selection = new Set([legacy.id, st1.id]);
+      T.layerToggle(l2.id, 'visible');
+      ok('图层：隐藏后不可见', !T.layerVisible(st1));
+      T.layerPruneSelection(); /* UI 层切换后调用（core 不自动清理） */
+      ok('图层：隐藏层的选择被清理', !S.selection.has(st1.id) && S.selection.has(legacy.id));
+      T.layerToggle(l2.id, 'locked');
+      ok('图层：锁定生效', T.layerLocked(st1));
+      ok('图层：图层对象计数', T.layerObjects(l2.id).length === 1 && T.layerObjects(S.layers[0].id).length === 1);
+
+      /* 删除规则：非空不能删、最后一层不能删 */
+      ok('图层：非空层不可删', T.layerRemove(l2.id) === false);
+      T.layerToggle(l2.id, 'visible'); T.layerToggle(l2.id, 'locked');
+      S.objects = [];
+      ok('图层：空层可删', T.layerRemove(l2.id) === true);
+      const last = S.layers[S.layers.length - 1];
+      ok('图层：最后一层不可删', T.layerRemove(last.id) === false);
+      ok('图层：改名截断 20 字', (T.layerRename(last.id, 'x'.repeat(30)), last.name.length === 20));
+
+      /* 旧文件兼容：fromJSON 无 layers 字段保持默认层 */
+      T.fromJSON({ objects: [{ type: 'rect', x: 0, y: 0, w: 5, h: 5 }] });
+      ok('图层：旧文件无 layers → 默认一层', S.layers.length === 1 && S.layers[0].id === 'L1' && T.layerId(S.objects[0]) === 'L1');
+      T.fromJSON({ objects: [], layers: [{ id: 'LA', name: 'A', visible: false, locked: false }], currentLayer: 'LA' });
+      ok('图层：新文件 layers 读取', S.layers.length === 1 && S.layers[0].id === 'LA' && S.currentLayer === 'LA');
+      /* 恢复默认状态，避免影响后续（无后续也保持整洁） */
+      T.fromJSON({ objects: [] });
+    })();
   } catch (e) {
     ok('运行异常', false, e && e.message);
   }

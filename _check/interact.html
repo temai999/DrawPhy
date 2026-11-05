@@ -585,6 +585,46 @@
     t('修剪：空白点击不误删', DP.state.objects.length === before18, DP.state.objects.length + ' vs ' + before18);
   })();
 
+  /* ---------- 19. 图层：显隐/锁定/当前层（阶段 8-c） ---------- */
+  (function () {
+    DP.state.objects = [];
+    DP.state.selection = new Set();
+    DP.model.fromJSON({ objects: [], layers: [{ id: 'L1', name: '图层 1', visible: true, locked: false }] });
+    DP.ui.setTool('select');
+    /* 画布上放一个圆（L1），切当前层 → 新建层 → 画矩形（应归新层） */
+    DP.state.objects.push({ id: 'lyC', type: 'circle', cx: 150, cy: 200, r: 50, style: Object.assign({}, DP.state.style) });
+    DP.model.layerAdd('辅助层');
+    const L2 = DP.state.currentLayer;
+    DP.ui.setTool('rect');
+    drag(300, 150, 380, 220);
+    const rect19 = DP.state.objects.find((o) => o.type === 'rect');
+    t('图层：新建层上绘制的对象带 layer 戳', !!rect19 && rect19.layer === L2, rect19 && rect19.layer);
+    /* 属性面板有图层面板 */
+    const propsHtml = document.getElementById('props').innerHTML;
+    t('图层：属性面板含图层区', /layer-row/.test(propsHtml) && /新建图层/.test(propsHtml));
+    /* 隐藏 L2：矩形不渲染、选择被清理 */
+    DP.state.selection = new Set([rect19.id]);
+    DP.model.layerToggle(L2, 'visible');
+    DP.model.layerPruneSelection();
+    DP.ui.render();
+    const svg19 = document.getElementById('board').innerHTML;
+    t('图层：隐藏层不渲染', !/data-id="' \+ rect19.id/.test(svg19) && !new RegExp(rect19.id).test(svg19), '');
+    t('图层：隐藏层对象被清出选择', !DP.state.selection.has(rect19.id));
+    /* 锁定 L1：圆不可点选；解锁后可 */
+    DP.model.layerToggle(DP.state.layers[0].id, 'locked');
+    DP.ui.render();
+    DP.ui.setTool('select');
+    click(200, 200); /* 点圆周（圆心点不中圆） */
+    t('图层：锁定层对象不可点选', !DP.state.selection.has('lyC'), [...DP.state.selection].join(','));
+    DP.model.layerToggle(DP.state.layers[0].id, 'locked');
+    DP.ui.render();
+    click(200, 200);
+    t('图层：解锁后可点选', DP.state.selection.has('lyC'), [...DP.state.selection].join(','));
+    /* 恢复单层默认，避免污染后续 */
+    DP.model.fromJSON({ objects: [] });
+    DP.ui.render();
+  })();
+
   if (errors.length) out.push('PAGE_ERRORS: ' + errors.join(' | '));
   out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
   document.getElementById('r').textContent = out.join('\n');

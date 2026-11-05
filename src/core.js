@@ -708,6 +708,7 @@
     let best = null;
     for (const o of DP.state.objects) {
       if (o.type !== 'line' || o.locked) continue;
+      if (!M.layerVisible(o) || M.layerLocked(o)) continue; /* 隐藏/锁定图层的导线不破口 */
       const t = segParam(p, o.x1, o.y1, o.x2, o.y2);
       if (t < -0.02 || t > 1.02) continue;
       const d = G.distToSeg(p, { x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 });
@@ -798,6 +799,7 @@
     if (!def) return null;
     const plan = M.planPartAt(def, pid, world, null);
     plan.obj.id = M.uid('pt');
+    M.stampLayer(plan.obj);
     DP.state.objects.push(plan.obj);
     plan.broke = plan.wire ? M.breakWireInto(plan.wire, plan.obj) : false;
     return plan;
@@ -962,6 +964,7 @@
     };
     for (const o of objects) {
       if (exclude && exclude.has(o.id)) continue;
+      if (!M.layerVisible(o)) continue;                     /* 隐藏图层不吸附 */
       const mod = moduleOf(o);
       if (mod && typeof mod.anchors === 'function') {
         for (const a of mod.anchors(o) || []) push(a.x, a.y, anchorLabel(a), o.id, a.tid);
@@ -978,6 +981,7 @@
   S.intersections = function (objects, near, radius) {
     const out = [];
     const close = objects.filter((o) => {
+      if (!M.layerVisible(o)) return false;
       const bb = M.localBBox(o);
       return near.x > bb.x - radius && near.x < bb.x + bb.w + radius && near.y > bb.y - radius && near.y < bb.y + bb.h + radius;
     });
@@ -1095,6 +1099,79 @@
     style: { stroke: '#22303c', width: 2, dash: 'solid', fill: 'none', opacity: 1, fontSize: 18, arrow: 'end' },
     groups: {}, // groupId -> true
     clipboard: null,
+    /* 图层（阶段 8-c）：对象缺省归第一层；先做显隐/锁定，排序后议 */
+    layers: [{ id: 'L1', name: '图层 1', visible: true, locked: false }],
+    currentLayer: 'L1',
+  };
+
+  /* ------------------------------- 图层 API -------------------------------
+   * 对象 o.layer === undefined 视作第一层（旧文件/旧对象天然兼容）。
+   * 可见性在渲染/命中/吸附/导出各消费点过滤；锁定只拦「编辑」不拦吸附。 */
+  M.layerId = function (o) {
+    return (o && o.layer) || (DP.state.layers[0] && DP.state.layers[0].id) || 'L1';
+  };
+  M.layerDef = function (o) {
+    const id = M.layerId(o);
+    return DP.state.layers.find((l) => l.id === id) || DP.state.layers[0] || null;
+  };
+  M.layerVisible = function (o) {
+    const d = M.layerDef(o);
+    return !d || d.visible !== false;
+  };
+  M.layerLocked = function (o) {
+    const d = M.layerDef(o);
+    return !!d && d.locked === true;
+  };
+  /* 新建对象打上当前图层（仅绘制创建点调用；粘贴/修剪件沿用来源） */
+  M.stampLayer = function (o) {
+    if (o && !o.layer) o.layer = DP.state.currentLayer || M.layerId(o);
+    return o;
+  };
+  M.layerObjects = function (id) {
+    return DP.state.objects.filter((o) => M.layerId(o) === id);
+  };
+
+  M.layerAdd = function (name) {
+    const n = DP.state.layers.length + 1;
+    const l = { id: 'L' + Date.now().toString(36) + n, name: name || `图层 ${n}`, visible: true, locked: false };
+    DP.state.layers.push(l);
+    DP.state.currentLayer = l.id;
+    return l;
+  };
+  M.layerRemove = function (id) {
+    const i = DP.state.layers.findIndex((l) => l.id === id);
+    if (i < 0) return false;
+    if (DP.state.layers.length <= 1) return false;          /* 至少保留一层 */
+    if (M.layerObjects(id).length) return false;            /* 只删空层 */
+    DP.state.layers.splice(i, 1);
+    if (DP.state.currentLayer === id) DP.state.currentLayer = DP.state.layers[0].id;
+    return true;
+  };
+  M.layerToggle = function (id, field) {
+    const l = DP.state.layers.find((x) => x.id === id);
+    if (!l || (field !== 'visible' && field !== 'locked')) return false;
+    l[field] = !l[field];
+    return true;
+  };
+  M.layerRename = function (id, name) {
+    const l = DP.state.layers.find((x) => x.id === id);
+    if (!l || !name) return false;
+    l.name = String(name).slice(0, 20);
+    return true;
+  };
+  M.layerSetCurrent = function (id) {
+    if (!DP.state.layers.find((x) => x.id === id)) return false;
+    DP.state.currentLayer = id;
+    return true;
+  };
+  /* 隐藏/锁定图层时清掉其对象的选择，避免「看不见却被选中」的幽灵操作 */
+  M.layerPruneSelection = function () {
+    let changed = false;
+    for (const id of Array.from(DP.state.selection)) {
+      const o = DP.state.objects.find((q) => q.id === id);
+      if (!o || !M.layerVisible(o) || M.layerLocked(o)) { DP.state.selection.delete(id); changed = true; }
+    }
+    return changed;
   };
 
   /* ------------------------------ 历史（差分式） ------------------------------
@@ -1264,12 +1341,15 @@
   };
 
   DP.model.toJSON = function () {
-    return { version: 1, page: DP.state.page, objects: DP.state.objects, groups: DP.state.groups };
+    return { version: 1, page: DP.state.page, objects: DP.state.objects, groups: DP.state.groups, layers: DP.state.layers, currentLayer: DP.state.currentLayer };
   };
   DP.model.fromJSON = function (data) {
     DP.state.page = Object.assign(DP.state.page, data.page || {});
     DP.state.objects = (data.objects || []).map((o) => o);
     DP.state.groups = data.groups || {};
+    /* 图层：旧文件没有 layers 字段 → 保持默认层（对象缺 layer 即归第一层） */
+    DP.state.layers = Array.isArray(data.layers) && data.layers.length ? data.layers : DP.state.layers;
+    DP.state.currentLayer = DP.state.layers.find((l) => l.id === data.currentLayer) ? data.currentLayer : DP.state.layers[0].id;
     DP.state.selection = new Set();
     H.reset();
   };

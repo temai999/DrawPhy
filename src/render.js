@@ -176,10 +176,15 @@
     }
   };
 
-  /* 按数组顺序逐个渲染，保证层级正确（组合只是选择语义） */
+  /* 按数组顺序逐个渲染，保证层级正确（组合只是选择语义）；
+     隐藏图层（阶段 8-c）不参与渲染与导出 */
   R.objects = function (objs) {
+    const M = DP.model;
     let out = '';
-    for (const o of objs) out += R.object(o);
+    for (const o of objs) {
+      if (M.layerVisible && !M.layerVisible(o)) continue;
+      out += R.object(o);
+    }
     return out;
   };
 

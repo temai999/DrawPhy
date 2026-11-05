@@ -300,6 +300,30 @@ aside.right { border-left: 1px solid var(--line); }
 }
 .mini:hover { background: #f1f5f8; border-color: #d7dee7; }
 .tip { font-size: 11px; color: #93a0ac; line-height: 1.7; margin: 8px 2px 0; }
+
+/* ------------------------------ 图层面板 ------------------------------ */
+.layers { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 6px; }
+.layer-row {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 6px; border-radius: 7px; cursor: pointer;
+  font-size: 12px; color: var(--ink); border: 1px solid transparent;
+  user-select: none;
+}
+.layer-row:hover { background: #f1f4f8; }
+.layer-row.cur { background: #e6f2f0; border-color: #bfe0dc; }
+.layer-row.hid .ly-name { color: #a6b1bd; text-decoration: line-through; }
+.ly-ic {
+  width: 20px; height: 20px; line-height: 18px; text-align: center;
+  border: 1px solid var(--line); border-radius: 6px; background: #fff;
+  font-size: 10px; color: #67737f; cursor: pointer; padding: 0; flex: none;
+}
+.ly-ic:hover { border-color: #c8d2dd; background: #f7fafc; }
+.ly-ic.off { color: #b6c0ca; }
+.ly-ic.on { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.ly-del { color: #c0392b; }
+.ly-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ly-n { font-size: 10px; color: #9aa7b4; font-variant-numeric: tabular-nums; }
+.ly-add { margin: 2px 0 4px; }
 /* 帮助面板：工具快捷键小片 */
 .keys .tk-list { display: flex; flex-wrap: wrap; gap: 3px 12px; }
 .keys .tk { white-space: nowrap; }
