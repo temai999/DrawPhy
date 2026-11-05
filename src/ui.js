@@ -74,6 +74,24 @@
     if (sel.length) U.toast('已应用样式到 ' + sel.length + ' 个对象');
   }
 
+  /* --------------------- 线型 / 线宽按钮：用实际线样，不用文字符号 ---------------------
+     线型：按真实 dasharray 画一段线（所见即所得），名称只放 title 提示；
+     线宽：一段该粗细的线样 + 数字文字（只看线样分不清 1 与 1.5，数字必须留）。
+     ribbon 样式面板与右侧属性面板共用同一套生成器，避免两处样式漂移。 */
+  function dashBtnHtml(d, active, color) {
+    const da = d.pattern ? ` stroke-dasharray="${d.pattern}"` : '';
+    return `<button type="button" data-d="${d.id}" class="pick-dash${active ? ' on' : ''}" title="${d.name}（${d.hint}）">`
+      + `<svg viewBox="0 0 40 12" width="34" height="11" fill="none" stroke="${color || 'currentColor'}" `
+      + `stroke-width="2" stroke-linecap="butt"><line x1="1" y1="6" x2="39" y2="6"${da}/></svg></button>`;
+  }
+  function widthBtnHtml(w, active, color) {
+    /* 线样粗细按真实值画（上限 9，避免超出 12 高的 viewBox） */
+    const sw = Math.min(9, Math.max(0.75, +w));
+    return `<button type="button" data-w="${w}" class="pick-width${active ? ' on' : ''}" title="线宽 ${w}">`
+      + `<svg viewBox="0 0 22 12" width="20" height="11" fill="none" stroke="${color || 'currentColor'}" `
+      + `stroke-width="${sw}" stroke-linecap="round"><line x1="2" y1="6" x2="20" y2="6"/></svg><b>${w}</b></button>`;
+  }
+
   /* ------------------------------ 数据驱动面板 ------------------------------ */
   /* 文件/排列/视图 的竖排分类按钮（index.html 静态）→ 展开面板（本表驱动）。
      每个动作保留原有 id 或 data-act 契约；按钮在 #ribInline 打开时动态生成、
@@ -162,14 +180,8 @@
       inner = `<div class="part-grid3">${list.map(toolBtn).join('')}</div>`;
     } else if (key === 'style') {
       /* 线型/线宽一律从 DP.style 取（唯一数据源）：新增线型只改 core/style.js */
-      const dashBtns = DP.style.DASHES.map((d) => {
-        const da = d.pattern ? ` stroke-dasharray="${d.pattern}"` : '';
-        return `<button data-d="${d.id}" title="${d.name}（${d.hint}）"${
-          d.id === st.style.dash ? ' class="on"' : ''
-        }><svg viewBox="0 0 34 10" width="28" height="9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="1" y1="5" x2="33" y2="5"${da}/></svg></button>`;
-      }).join('');
-      const widthBtns = DP.style.WIDTHS.map((w) =>
-        `<button data-w="${w}" title="线宽 ${w}"${+st.style.width === w ? ' class="on"' : ''}>${w}</button>`).join('');
+      const dashBtns = DP.style.DASHES.map((d) => dashBtnHtml(d, d.id === st.style.dash)).join('');
+      const widthBtns = DP.style.WIDTHS.map((w) => widthBtnHtml(w, +st.style.width === w)).join('');
       inner = `<div class="style-grid3">
         <div class="style-row">
           <span class="style-label">线色</span>
@@ -1979,20 +1991,19 @@
     const sel = DP.sel.list();
     const stl = sel.length ? sel[0].style : st.style;
     const s = stl || st.style;
-    /* 线宽/线型下拉同样由 DP.style 生成；文档里的非预设线宽追加一项，避免打开旧文件时值被悄悄改掉 */
+    /* 线宽/线型用「实际线样」按钮（不是文字下拉）：线型按真实 dasharray 画线，
+       线宽按真实粗细画线并附数字；线样用当前线色，所见即所得。 */
     const curW = +s.width || DP.config.defaults.strokeWidth;
     const wList = DP.style.WIDTHS.slice();
     if (wList.indexOf(curW) < 0) wList.push(curW);
     wList.sort((a, b) => a - b);
-    const widthOpts = wList.map((w) =>
-      `<option value="${w}"${w === curW ? ' selected' : ''}>${w}</option>`).join('');
-    const dashOpts = (DP.style.isDash(s.dash) ? '' : `<option value="${s.dash}" selected>${s.dash || '实线'}</option>`) +
-      DP.style.DASHES.map((d) => `<option value="${d.id}"${s.dash === d.id ? ' selected' : ''}>${d.name}</option>`).join('');
+    const widthPicks = wList.map((w) => widthBtnHtml(w, w === curW, s.stroke)).join('');
+    const dashPicks = DP.style.DASHES.map((d) => dashBtnHtml(d, s.dash === d.id, s.stroke)).join('');
     const common = `
       <div class="row"><label>线色</label><input type="color" id="pStroke" value="${s.stroke}"></div>
-      <div class="row"><label>线宽</label><select id="pWidth" title="可选预设；也可直接在数值框输入">${widthOpts}</select>
-        <input type="number" id="pWidthNum" min="0.25" max="24" step="0.25" value="${curW}"></div>
-      <div class="row"><label>线型</label><select id="pDash">${dashOpts}</select></div>
+      <div class="row"><label>线型</label><div class="picks" id="pDash">${dashPicks}</div></div>
+      <div class="row"><label>线宽</label><div class="picks" id="pWidth">${widthPicks}</div></div>
+      <div class="row"><label>自定义</label><input type="number" id="pWidthNum" min="0.25" max="24" step="0.25" value="${curW}"></div>
       <div class="row"><label>填充</label><input type="color" id="pFill" value="${s.fill && s.fill !== 'none' ? s.fill : '#ffffff'}">
         <button class="mini" id="pFillNone">无</button></div>
       <div class="row"><label>字号</label><input type="number" id="pFontSize" min="8" max="120" value="${s.fontSize || 18}"></div>
@@ -2083,25 +2094,27 @@
       if (el) el.addEventListener(ev, fn);
     };
     on('pStroke', 'input', (e) => apply((o) => { (o.style || st.style).stroke = e.target.value; if (!sel.length) st.style.stroke = e.target.value; }));
-    on('pWidth', 'change', (e) => {
-      const v = DP.style.normWidth(e.target.value);
-      apply((o) => { (o.style || st.style).width = v; });
+    /* 线型/线宽：实际线样按钮点选（不是下拉），点完同步选中态 */
+    const syncWidthPicks = (v) => {
+      box.querySelectorAll('#pWidth .pick-width').forEach((b) => b.classList.toggle('on', +b.dataset.w === v));
+    };
+    box.querySelectorAll('#pDash .pick-dash').forEach((b) => b.addEventListener('click', () => {
+      apply((o) => { (o.style || st.style).dash = b.dataset.d; });
+      box.querySelectorAll('#pDash .pick-dash').forEach((x) => x.classList.toggle('on', x === b));
+    }));
+    box.querySelectorAll('#pWidth .pick-width').forEach((b) => b.addEventListener('click', () => {
+      const v = +b.dataset.w;
       const num = box.querySelector('#pWidthNum');
       if (num) num.value = v;
-    });
+      apply((o) => { (o.style || st.style).width = v; });
+      syncWidthPicks(v);
+    }));
     on('pWidthNum', 'change', (e) => {
       const v = DP.style.normWidth(e.target.value);
       e.target.value = v;
       apply((o) => { (o.style || st.style).width = v; });
-      /* 非预设宽度：就地补一项，保证下拉不显示「空白」 */
-      const selW = box.querySelector('#pWidth');
-      if (selW) {
-        let opt = Array.prototype.slice.call(selW.options).find((x) => +x.value === v);
-        if (!opt) { opt = new Option(String(v), String(v)); selW.add(opt); }
-        selW.value = String(v);
-      }
+      syncWidthPicks(v);
     });
-    on('pDash', 'change', (e) => apply((o) => { (o.style || st.style).dash = e.target.value; }));
     on('pFill', 'input', (e) => apply((o) => { (o.style || st.style).fill = e.target.value; }));
     on('pFillNone', 'click', () => apply((o) => { (o.style || st.style).fill = 'none'; }));
     on('pFontSize', 'change', (e) => {

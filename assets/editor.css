@@ -130,8 +130,26 @@ button { cursor: pointer; }
   background: var(--accent-weak); border-color: var(--accent);
   color: var(--accent); font-weight: 600;
 }
-#swWidth button { width: 34px !important; font-size: 11px; }
-#swDash button svg { display: block; margin: 0 auto; }
+/* 线型：实际线样按钮（无文字）；线宽：线样 + 数字 */
+#swDash button { width: 38px !important; }
+#swWidth button {
+  width: 46px !important; font-size: 10px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+}
+#swWidth button b { font-weight: 500; }
+#swDash button svg, #swWidth button svg { display: block; }
+
+/* 属性面板：线型/线宽的线样按钮网格（3 列，两行放完 6 项） */
+.picks { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.picks button {
+  height: 26px; padding: 0 2px; border: 1px solid var(--line); border-radius: 6px;
+  background: #fbfcfd; color: #46535f; font-size: 10px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+}
+.picks button:hover { border-color: var(--accent); }
+.picks button.on { border-color: var(--accent); background: var(--accent-weak); }
+.picks button svg { display: block; }
+.picks button b { font-weight: 500; }
 .rib-tools { display: flex; gap: 3px; }
 .rib-tool { width: 38px; height: 34px; }
 .rib-acts { display: flex; flex-direction: column; gap: 4px; }
