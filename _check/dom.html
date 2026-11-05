@@ -1,0 +1,150 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DrawPhy 路 绉戝缁樺浘鏉?/title>
+<link rel="stylesheet" href="assets/editor.css">
+</head>
+<body>
+<div id="app">
+  <!-- EE 鍙屽眰椤舵爮锛氱涓€灞傛爣绛鹃〉 -->
+  <header id="topbar">
+    <div class="brand"><b>DrawPhy</b></div>
+    <nav id="tabs">
+      <button data-tab="file">鏂囦欢</button>
+      <button data-tab="draw" class="on">缁樺浘</button>
+      <button data-tab="part">閮ㄤ欢</button>
+      <button data-tab="arrange">鎺掑垪</button>
+      <button data-tab="view">瑙嗗浘</button>
+    </nav>
+    <div class="group right">
+      <span id="zoomLabel">17%</span>
+    </div>
+  </header>
+
+  <!-- 绗簩灞傦細妯悜鍒嗙粍宸ュ叿甯?-->
+  <div id="ribbon">
+    <!-- 鏂囦欢锛氱珫鎺掑垎绫绘寜閽紝鐐瑰嚮灏卞湴灞曞紑锛堜笌缁樺浘/閮ㄤ欢鍚屾満鍒讹級 -->
+    <div class="rgroup" data-r="file" hidden="">
+      <div class="rcell partcats" id="fileCatBar">
+        <button data-cat="file.action" style="background:#2563eb"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path><path d="M12 12v6M9 15h6"></path></svg><span>鏂囦欢鎿嶄綔</span></button>
+        <button data-cat="file.export" style="background:#10b981"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"></path><path d="M8 10l4 4 4-4"></path><path d="M5 19h14"></path></svg><span>瀵煎嚭</span></button>
+        <button data-cat="file.sample" style="background:#f59e0b"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M10 9.5v5l4.5-2.5z" fill="currentColor" stroke="none"></path></svg><span>绀轰緥</span></button>
+        <button data-cat="file.help" style="background:#8b5cf6"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M9.7 9.2a2.4 2.4 0 1 1 3.3 2.2c-.7.3-1 .8-1 1.6"></path><circle cx="12" cy="16.8" r=".5" fill="currentColor"></circle></svg><span>甯姪</span></button>
+      </div>
+    </div>
+
+    <!-- 缁樺浘锛氱珫鎺掑垎绫绘寜閽紝鐐瑰嚮灏卞湴灞曞紑锛堜笌閮ㄤ欢鍚屾牸寮忥級 -->
+    <div class="rgroup" data-r="draw" hidden="">
+      <div class="rcell partcats" id="drawCatBar">
+        <button data-cat="shape" class="on"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="3.5" width="11" height="11" rx="1.5"></rect><circle cx="16" cy="16" r="4.2"></circle></svg><span>鍩烘湰鍥惧舰</span></button><div id="ribInline" data-key="shape"><div class="part-grid3"><button class="tool rib-part" data-tool="select" title="閫夋嫨锛圴锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4 L6 17 L9.5 13.5 L12 19.5 L14.5 18.5 L12 12.5 L17 12.5 Z" fill="currentColor" stroke="none"></path></svg></span><span class="part-name">閫夋嫨</span></button><button class="tool rib-part" data-tool="line" title="绾挎锛圠锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="20" x2="20" y2="4"></line></svg></span><span class="part-name">绾挎</span></button><button class="tool rib-part" data-tool="arrow" title="绠ご锛圓锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="19" x2="17" y2="6"></line><path d="M17 6 L10 7 L15 12 Z" fill="currentColor" stroke="none"></path></svg></span><span class="part-name">绠ご</span></button><button class="tool rib-part" data-tool="darrow" title="鍙岀澶达紙W锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line><path d="M5 12 L11 9.5 L11 14.5 Z" fill="currentColor" stroke="none"></path><path d="M19 12 L13 9.5 L13 14.5 Z" fill="currentColor" stroke="none"></path></svg></span><span class="part-name">鍙岀澶?/span></button><button class="tool rib-part" data-tool="polyline" title="鎶樼嚎锛圥锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4,17 9,9 14,14 20,6"></polyline></svg></span><span class="part-name">鎶樼嚎</span></button><button class="tool rib-part" data-tool="polygon" title="澶氳竟褰紙G锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5 L20 19 L4 19 Z"></path></svg></span><span class="part-name">澶氳竟褰?/span></button><button class="tool rib-part" data-tool="rect" title="鐭╁舰锛圧锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="7" width="14" height="10" rx="1"></rect></svg></span><span class="part-name">鐭╁舰</span></button><button class="tool rib-part" data-tool="ellipse" title="妞渾锛圗锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="12" rx="8" ry="5.5"></ellipse></svg></span><span class="part-name">妞渾</span></button><button class="tool rib-part" data-tool="circle" title="鍦嗭紙C锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle></svg></span><span class="part-name">鍦?/span></button><button class="tool rib-part" data-tool="arc" title="鍦嗗姬锛圲锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 18 A 8 8 0 0 1 18 6"></path></svg></span><span class="part-name">鍦嗗姬</span></button><button class="tool rib-part" data-tool="freehand" title="寰掓墜锛團锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15 Q 8 7 12 12 T 20 10"></path></svg></span><span class="part-name">寰掓墜</span></button><button class="tool rib-part" data-tool="bezier" title="璐濆灏旓紙J锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19 Q 11 3 20 7"></path><circle cx="4" cy="19" r="1.5"></circle><circle cx="20" cy="7" r="1.5"></circle><path d="M4 19 L11 11 L20 7" stroke-dasharray="2 2"></path></svg></span><span class="part-name">璐濆灏?/span></button><button class="tool rib-part" data-tool="point" title="鐐癸紙O锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"></circle></svg></span><span class="part-name">鐐?/span></button><button class="tool rib-part" data-tool="roundrect" title="鍦嗚鐭╁舰锛圖锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="7" width="16" height="10" rx="4"></rect></svg></span><span class="part-name">鍦嗚鐭╁舰</span></button><button class="tool rib-part" data-tool="func" title="鍑芥暟鍥惧儚锛圚锛?>
+      <span class="part-thumb"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17 Q 8 4 12 12 T 21 7"></path><line x1="3" y1="20" x2="21" y2="20" stroke-dasharray="2 2"></line></svg></span><span class="part-name">鍑芥暟鍥惧儚</span></button></div></div>
+        <button data-cat="text"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M12 6v13M8.5 19h7"></path></svg><span>鏂囧瓧涓庢爣娉?/span></button>
+        <button data-cat="edit"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1.2-4.2L15 6l3 3L8.2 18.8z"></path><path d="M13.5 7.5l3 3"></path></svg><span>缂栬緫宸ュ叿</span></button>
+        <button data-cat="style"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.6 0 2.2-1.1 2.2-2.2 0-1.4 1.1-2 2.4-2H18a4 4 0 0 0 4-4c0-5-4.5-7.8-10-7.8z"></path><circle cx="7.5" cy="11" r="1.1"></circle><circle cx="12" cy="8" r="1.1"></circle><circle cx="16.5" cy="11" r="1.1"></circle></svg><span>鏍峰紡</span></button>
+      </div>
+    </div>
+
+    <!-- 閮ㄤ欢锛氱珫鎺掑垎绫绘寜閽紝鐐瑰嚮灏卞湴灞曞紑 -->
+    <div class="rgroup" data-r="part" hidden="">
+      <div class="rcell partcats" id="partCatBar">
+        <button data-cat="鐢靛"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M13 2L4 14h6l-1 8 9-12h-6z"></path></svg><span>鐢靛</span></button>
+        <button data-cat="鍏夊"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="12" rx="3" ry="9"></ellipse><path d="M3 12h3M18 12h3M12 3v3M12 18v3"></path></svg><span>鍏夊</span></button>
+        <button data-cat="鍔涘"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 18h16M8 18V6l8 4"></path></svg><span>鍔涘</span></button>
+        <button data-cat="鐑"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 22a6 6 0 006-6c0-4-6-9-6-12 0 3-6 5-6 9a6 6 0 006 6z"></path></svg><span>鐑</span></button>
+        <button data-cat="浠櫒"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="7"></circle><path d="M12 13l4-4M9 3h6"></path></svg><span>浠櫒</span></button>
+        <button data-cat="甯哥敤鍥惧舰"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="1"></rect><circle cx="16.5" cy="16.5" r="3.5"></circle></svg><span>甯哥敤鍥惧舰</span></button>
+        <button data-cat="杩炴帴绾?><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="5" cy="12" r="2.5"></circle><circle cx="19" cy="5" r="2.5"></circle><circle cx="19" cy="19" r="2.5"></circle><path d="M7.5 12h9M17 6.5l-2 4M17 17.5l-2-4"></path></svg><span>杩炴帴绾?/span></button>
+        <button data-cat="灏哄"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 8l13 13M5 6l2 2M8 5l2 2M11 8l2 2M14 11l2 2"></path><path d="M14 21l7-7"></path></svg><span>灏哄</span></button>
+        <button data-cat="鐜被"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="4"></circle></svg><span>鐜被</span></button>
+        <button data-cat="鍖栧閿?><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="7" r="3"></circle><circle cx="18" cy="17" r="3"></circle><path d="M9 11l6-3M9 13l6 3"></path></svg><span>鍖栧閿?/span></button>
+        <button data-cat="閫氱敤"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M4 12h16M12 4v16"></path></svg><span>閫氱敤</span></button>
+      </div>
+    </div>
+
+    <!-- 鎺掑垪锛氱珫鎺掑垎绫绘寜閽紝鐐瑰嚮灏卞湴灞曞紑 -->
+    <div class="rgroup" data-r="arrange" hidden="">
+      <div class="rcell partcats" id="arrangeCatBar">
+        <button data-cat="align.group" style="background:#f43f5e"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="7" height="7" rx="1"></rect><path d="M15 9V5H5v10h4"></path><path d="M9 15v4h10V9h-4"></path></svg><span>缁勫悎</span></button>
+        <button data-cat="align.layer" style="background:#0ea5e9"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16"></path><path d="M8.5 8L12 4.5 15.5 8"></path><path d="M8.5 16L12 19.5 15.5 16"></path></svg><span>灞傜骇</span></button>
+        <button data-cat="align.transform" style="background:#14b8a6"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"></path><path d="M20 3v4h-4"></path></svg><span>鍙樻崲</span></button>
+        <button data-cat="align.align" style="background:#6366f1"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h13"></path><path d="M7 3v18"></path></svg><span>瀵归綈</span></button>
+      </div>
+    </div>
+
+    <!-- 瑙嗗浘锛氱珫鎺掑垎绫绘寜閽紝鐐瑰嚮灏卞湴灞曞紑 -->
+    <div class="rgroup" data-r="view" hidden="">
+      <div class="rcell partcats" id="viewCatBar">
+        <button data-cat="view.display" style="background:#22c55e"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"></path><circle cx="12" cy="12" r="2.6"></circle></svg><span>鏄剧ず</span></button>
+        <button data-cat="view.zoom" style="background:#f97316"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6"></circle><path d="M15 15l5.5 5.5"></path><path d="M10.5 8v5M8 10.5h5"></path></svg><span>缂╂斁</span></button>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <section class="stage">
+      <svg id="board" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 168 249"><rect x="0" y="0" width="168" height="249" fill="#f3f5f8"></rect><g transform="translate(-36.16,59.5) scale(0.17165217391304347)"><rect x="0" y="0" width="1240" height="820" fill="#ffffff" stroke="#c9d2dc" stroke-width="5.825734549138805"></rect><text x="280" y="452" font-size="18" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">涓茶仈鐢佃矾</tspan></text><g transform="matrix(1 0 0 1 280 624)"><line x1="0" y1="16" x2="22" y2="16" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="22" y1="4" x2="22" y2="28" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="30" y1="11" x2="30" y2="21" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="30" y1="16" x2="64" y2="16" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><text x="15" y="8" font-size="10" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="middle" fill="#1f2933"><tspan dy="0">+</tspan></text></g><g transform="matrix(1 0 0 1 430 618)"><line x1="0" y1="24" x2="16" y2="24" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><circle cx="16" cy="24" r="3" fill="none" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></circle><line x1="16" y1="24" x2="46" y2="8" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><circle cx="46" cy="24" r="3" fill="none" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></circle><line x1="46" y1="24" x2="64" y2="24" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line></g><g transform="matrix(1 0 0 1 610 622)"><line x1="0" y1="18" x2="16" y2="18" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><circle cx="30" cy="18" r="12" fill="none" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></circle><line x1="21" y1="9" x2="39" y2="27" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="39" y1="9" x2="21" y2="27" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="44" y1="18" x2="60" y2="18" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line></g><g transform="matrix(1 0 0 1 760 618)"><circle cx="24" cy="22" r="17" fill="none" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></circle><text x="24" y="27" font-size="16" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="middle" fill="#1f2933"><tspan dy="0">A</tspan></text><line x1="0" y1="22" x2="7" y2="22" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="41" y1="22" x2="48" y2="22" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line></g><line x1="344" y1="640" x2="430" y2="640" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="494" y1="640" x2="610" y2="640" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="670" y1="640" x2="760" y2="640" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="808" y1="640" x2="920" y2="640" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="920" y1="640" x2="920" y2="480" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="920" y1="480" x2="280" y2="480" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="280" y1="480" x2="280" y2="640" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><text x="296" y="678" font-size="14" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">鐢垫簮</tspan></text><text x="438" y="678" font-size="14" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">寮€鍏?S</tspan></text><text x="604" y="678" font-size="14" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">鐏场 L</tspan></text><text x="742" y="678" font-size="14" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">鐢垫祦琛?A</tspan></text><text x="300" y="112" font-size="18" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">鍙楀姏鍒嗘瀽</tspan></text><g transform="matrix(1 0 0 1 420 180)"><rect x="0" y="0" width="60" height="40" rx="2" fill="none" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></rect></g><line x1="450" y1="200" x2="450" y2="306" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><polygon points="450,306 453.36,297.6 446.64,297.6" fill="#1f2933" stroke="none"></polygon><line x1="450" y1="200" x2="450" y2="94" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><polygon points="450,94 446.64,102.4 453.36,102.4" fill="#1f2933" stroke="none"></polygon><line x1="450" y1="200" x2="344" y2="200" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><polygon points="344,200 352.4,203.36 352.4,196.64" fill="#1f2933" stroke="none"></polygon><text x="462" y="322" font-size="16" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">G</tspan></text><text x="440" y="88" font-size="16" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">N</tspan></text><text x="324" y="194" font-size="16" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">f</tspan></text><text x="600" y="170" font-size="14" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">G 鈥?閲嶅姏</tspan></text><text x="600" y="196" font-size="14" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">N 鈥?鏀寔鍔?/tspan></text><text x="600" y="222" font-size="14" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">f 鈥?鎽╂摝鍔?/tspan></text><text x="700" y="168" font-size="18" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">鍑搁€忛暅鑱氬厜</tspan></text><g transform="matrix(1 0 0 1 878 208)"><path d="M22 2 C 32 16 36 34 36 42 C 36 50 32 68 22 82 C 12 68 8 50 8 42 C 8 34 12 16 22 2 Z" fill="none" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></g><line x1="700" y1="250" x2="1120" y2="250" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><g transform="matrix(1 0 0 1 706 216)"><line x1="0" y1="9" x2="90" y2="9" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><polygon points="90,9 79,4.38 79,13.62" fill="none" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polygon></g><line x1="790" y1="225" x2="878" y2="225" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></line><line x1="878" y1="225" x2="1052" y2="248" stroke="#1f2933" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></line><polygon points="1052,248 1044.49,243.78 1043.65,250.12" fill="#1f2933" stroke="none"></polygon><g transform="matrix(1 0 0 1 1055 244)"><circle cx="6" cy="6" r="3" fill="none" stroke="#1f2933" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></circle></g><text x="1044" y="286" font-size="15" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">F</tspan></text><text x="712" y="202" font-size="13" font-family="'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif" text-anchor="start" fill="#1f2933"><tspan dy="0">骞宠鍏?/tspan></text></g></svg>
+      <input id="inlineText" class="inline-text" hidden="" autocomplete="off" spellcheck="false">
+      <div id="toast" class="on">宸叉彃鍏ョず渚嬶紙鍙洿鎺ョ紪杈戯級</div>
+    </section>
+
+    <aside class="right">
+      <div class="panel-title">灞炴€?/div>
+      <div id="props" class="props"><div class="props-title">鐢诲竷</div>
+        <div class="row"><label>瀹?/label><input type="number" id="pageW" value="1240"><label>楂?/label><input type="number" id="pageH" value="820"></div>
+        
+      <div class="row"><label>绾胯壊</label><input type="color" id="pStroke" value="#22303c"></div>
+      <div class="row"><label>绾垮</label><input type="range" id="pWidth" min="0.5" max="8" step="0.5" value="2"><span id="pWidthVal">2</span></div>
+      <div class="row"><label>绾垮瀷</label><select id="pDash">
+        <option value="solid" selected="">瀹炵嚎</option>
+        <option value="dashed">铏氱嚎</option>
+        <option value="dotted">鐐圭嚎</option>
+      </select></div>
+      <div class="row"><label>濉厖</label><input type="color" id="pFill" value="#ffffff">
+        <button class="mini" id="pFillNone">鏃?/button></div>
+      <div class="row"><label>瀛楀彿</label><input type="number" id="pFontSize" min="8" max="120" value="18"></div>
+    
+        <p class="tip">鏈€変腑瀵硅薄銆傞€夋嫨宸ュ叿涓恒€岄€夈€嶏紝鐐瑰嚮鍥惧舰鍙€変腑銆?/p></div>
+    </aside>
+  </main>
+
+  <div id="partPop" hidden=""></div>
+
+  <footer><span id="hint">灏辩华</span></footer>
+</div>
+<input type="file" id="fileInput" accept=".json" hidden="">
+
+<script src="src/core/config.js"></script>
+<script src="src/core/module-wrap.js"></script>
+<script src="src/core/registry.js"></script>
+<script src="src/core/eventbus.js"></script>
+<script src="src/core.js"></script>
+<script src="src/func.js"></script>
+<script src="src/parts.js"></script>
+<script src="src/render.js"></script>
+<script src="src/ui.js"></script>
+<script src="src/io.js"></script>
+<script>
+  window.addEventListener('DOMContentLoaded', function () {
+    DP.ui.init();
+    var q = new URLSearchParams(location.search);
+    if (q.get('sample') === '1') DP.io.sample();
+  });
+</script>
+
+
+</body></html>

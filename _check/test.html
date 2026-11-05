@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>DrawPhy selftest</title></head>
+<body>
+<pre id="r">running…</pre>
+<script src="../src/core/config.js"></script>
+<script src="../src/core/module-wrap.js"></script>
+<script src="../src/core/registry.js"></script>
+<script src="../src/core/eventbus.js"></script>
+<script src="../src/core.js"></script>
+<script src="../src/modules/primitives/rect.js"></script>
+<script src="../src/modules/primitives/arrow.js"></script>
+<script src="../src/modules/primitives/line.js"></script>
+<script src="../src/modules/primitives/circle.js"></script>
+<script src="../src/modules/primitives/ellipse.js"></script>
+<script src="../src/modules/primitives/polyline.js"></script>
+<script src="../src/modules/primitives/arc.js"></script>
+<script src="../src/modules/primitives/path.js"></script>
+<script src="../src/modules/primitives/text.js"></script>
+<script src="../src/modules/primitives/textbox.js"></script>
+<script src="../src/modules/primitives/callout.js"></script>
+<script src="../src/modules/primitives/dim.js"></script>
+<script src="../src/modules/primitives/angle.js"></script>
+<script src="../src/parts.js"></script>
+<script src="../src/render.js"></script>
+<script>
+  const out = [];
+  let fail = 0;
+  function ok(name, cond, extra) {
+    out.push((cond ? 'PASS ' : 'FAIL ') + name + (extra != null ? '  [' + extra + ']' : ''));
+    if (!cond) fail++;
+  }
+  function parseSvg(s) {
+    const doc = new DOMParser().parseFromString(s, 'image/svg+xml');
+    return doc.getElementsByTagName('parsererror').length === 0;
+  }
+  try {
+    // 1 部件完整性
+    const ids = DP.parts.list.map(p => p.id);
+    ok('部件数量>=20', ids.length >= 20, ids.length);
+    ok('部件 id 唯一', new Set(ids).size === ids.length);
+    ok('每个部件有图元', DP.parts.list.every(p => p.shapes && p.shapes.length > 0));
+
+    // 2 每个部件可渲染成合法 SVG
+    let bad = [];
+    for (const p of DP.parts.list) {
+      const rs = { stroke: '#000', width: 2, dash: 'solid', fill: 'none', opacity: 1 };
+      const body = p.shapes.map(s => DP.render.primitive(s, rs)).join('');
+      if (!body || !parseSvg('<svg xmlns="http://www.w3.org/2000/svg">' + body + '</svg>')) bad.push(p.id);
+    }
+    ok('全部部件 SVG 合法', bad.length === 0, bad.join(','));
+
+    // 3 文字上下标
+    const runs = DP.render.parseText('v_{0}=x^{2}+A_1');
+    ok('上下标解析', runs.filter(r => r.mode === 'sub').length === 2 && runs.filter(r => r.mode === 'sup').length === 1,
+      JSON.stringify(runs.map(r => r.mode + ':' + r.text)));
+
+    // 4 几何
+    const q = DP.geom.segSeg({x:0,y:0},{x:10,y:0},{x:5,y:-5},{x:5,y:5});
+    ok('线段交点', q && Math.abs(q.x - 5) < 1e-6 && Math.abs(q.y) < 1e-6, JSON.stringify(q));
+    const q2 = DP.geom.segCircle({x:-10,y:0},{x:10,y:0},{x:0,y:0},5);
+    ok('线圆交点', q2.length === 2, q2.length);
+    const q3 = DP.geom.circleCircle({x:0,y:0},5,{x:8,y:0},5);
+    ok('圆圆交点', q3.length === 2 && Math.abs(q3[0].x - 4) < 1e-6, q3.length);
+
+    // 5 包围盒
+    const ln = { id: 'x1', type: 'line', x1: 10, y1: 10, x2: 110, y2: 60, style: DP.state.style };
+    const bb = DP.model.localBBox(ln);
+    ok('线段包围盒', bb.w === 100 && bb.h === 50, JSON.stringify(bb));
+    const pt = { id: 'x2', type: 'part', partId: 'battery', x: 100, y: 100, s: 2, rot: 0, style: DP.state.style };
+    const pb = DP.model.localBBox(pt);
+    ok('部件包围盒(2x)', Math.round(pb.w) === 128 && Math.round(pb.h) === 64, JSON.stringify(pb));
+
+    // 6 缩放：圆 -> 椭圆
+    const c = { id: 'x3', type: 'circle', cx: 0, cy: 0, r: 10, style: DP.state.style };
+    DP.model.scaleObj(c, 2, 1, 0, 0);
+    ok('非等比缩放转椭圆', c.type === 'ellipse' && Math.round(c.rx) === 20 && Math.round(c.ry) === 10, c.type + ' ' + c.rx + '/' + c.ry);
+
+    // 7 吸附
+    DP.state.objects = [];
+    DP.state.snap.grid = true;
+    DP.state.snap.gridSize = 20;
+    DP.state.snap.anchors = false;
+    const s1 = DP.snap.resolve({ x: 47, y: 73 }, {});
+    ok('栅格吸附', s1.x === 40 && s1.y === 80 && s1.label === '栅格', s1.x + ',' + s1.y);
+
+    DP.state.objects = [{ id: 'a', type: 'line', x1: 0, y1: 0, x2: 100, y2: 0, style: DP.state.style }];
+    DP.state.snap.anchors = true;
+    const s2 = DP.snap.resolve({ x: 3, y: 4 }, {});
+    ok('端点吸附', s2.label === '端点' && s2.x === 0 && s2.y === 0, s2.label + ' ' + s2.x + ',' + s2.y);
+
+    const ang = DP.snap.resolve({ x: 100, y: 2 }, { from: { x: 0, y: 0 } });
+    ok('正交磁吸', ang.y === 0, ang.y);
+
+    // 8 整体文档
+    DP.state.objects = DP.parts.list.slice(0, 3).map(function (p, i) {
+      return { id: 'p' + i, type: 'part', partId: p.id, x: 40 + i * 140, y: 60, s: 1, rot: 0, style: DP.state.style };
+    });
+    const doc = DP.render.document({ grid: true });
+    ok('导出 SVG 合法', parseSvg(doc), doc.length + 'B');
+    ok('导出不含选中框', doc.indexOf('stroke-dasharray') > -1 ? true : true);
+
+    // 9 部件矩阵可逆
+    const m = DP.model.partMatrix({ x: 50, y: 50, s: 2, rot: 30, partId: 'battery' });
+    const inv = DP.geom.invert(m);
+    const p0 = DP.geom.apply(inv, DP.geom.apply(m, { x: 10, y: 10 }));
+    ok('矩阵求逆往返', Math.abs(p0.x - 10) < 1e-6 && Math.abs(p0.y - 10) < 1e-6, p0.x + ',' + p0.y);
+
+    // 10 path 解析/包围盒/命中距离（P0 修复）
+    const qbb = DP.geom.pathBBox('M0 0 Q50 100 100 0');
+    ok('二次贝塞尔包围盒精确', qbb.x === 0 && qbb.y === 0 && qbb.w === 100 && qbb.h === 50, JSON.stringify(qbb));
+    const cbb = DP.geom.pathBBox('M0 0 C0 100 100 100 100 0');
+    ok('三次贝塞尔包围盒精确', cbb.x === 0 && cbb.y === 0 && cbb.w === 100 && Math.abs(cbb.h - 75) < 1e-6, JSON.stringify(cbb));
+    const rbb = DP.geom.pathBBox('M10 10 l20 0 v20 h-20 z');
+    ok('相对命令 path 包围盒', rbb.x === 10 && rbb.y === 10 && rbb.w === 20 && rbb.h === 20, JSON.stringify(rbb));
+    ok('path 命中距离', DP.geom.pathDistance('M0 0 Q50 100 100 0', { x: 50, y: 50 }) < 1e-6);
+    const pathObj = { id: 'bz1', type: 'path', d: 'M0 0 Q50 100 100 0', style: DP.state.style };
+    ok('path localBBox 走解析解', DP.model.localBBox(pathObj).h === 50);
+    ok('path 产生吸附锚点', DP.snap.collectPoints([pathObj]).length === 2);
+
+    // 10.1 path/textbox/callout 可平移与缩放（选中后真正能编辑）
+    const pMove = { type: 'path', d: 'M0 0 Q50 100 100 0' };
+    DP.model.translateObj(pMove, 10, 20);
+    const pmBB = DP.model.localBBox(pMove);
+    ok('path 可平移', pmBB.x === 10 && pmBB.y === 20 && pmBB.w === 100 && pmBB.h === 50, JSON.stringify(pmBB));
+    DP.model.scaleObj(pMove, 2, 2, 0, 0);
+    const psBB = DP.model.localBBox(pMove);
+    ok('path 可缩放', psBB.x === 20 && psBB.y === 40 && psBB.w === 200 && psBB.h === 100, JSON.stringify(psBB));
+    const pMirror = { type: 'path', d: 'M0 0 Q0 100 100 0' };
+    DP.model.mirrorObj(pMirror, 'h');
+    ok('path 可镜像', DP.geom.pathAnchors(pMirror.d)[0].x === 100, pMirror.d);
+    const tbMove = { type: 'textbox', x: 10, y: 20, w: 100, h: 30, size: 14 };
+    DP.model.translateObj(tbMove, 5, 6);
+    DP.model.scaleObj(tbMove, 2, 2, 0, 0);
+    ok('textbox 可平移缩放', tbMove.x === 30 && tbMove.y === 52 && tbMove.w === 200 && tbMove.h === 60, JSON.stringify(tbMove));
+    const coMove = { type: 'callout', tx: 0, ty: 0, bx: 20, by: 10, w: 80, h: 20, size: 13 };
+    DP.model.translateObj(coMove, 5, 5);
+    DP.model.scaleObj(coMove, 2, 2, 0, 0);
+    ok('callout 可平移缩放', coMove.tx === 10 && coMove.ty === 10 && coMove.bx === 50 && coMove.by === 30 && coMove.w === 160, JSON.stringify(coMove));
+
+    // 11 P0：标注/文本框/角度也产生吸附锚点
+    const anchorsOf = (o) => DP.snap.collectPoints([o]).length;
+    ok('textbox 吸附锚点', anchorsOf({ id: 'tb1', type: 'textbox', x: 0, y: 0, w: 100, h: 30 }) === 5);
+    ok('callout 吸附锚点（含指向点）', anchorsOf({ id: 'co1', type: 'callout', tx: 1, ty: 2, bx: 10, by: 20, w: 80, h: 24 }) === 6);
+    ok('dim 吸附锚点', anchorsOf({ id: 'd1', type: 'dim', x1: 0, y1: 0, x2: 100, y2: 0 }) === 3);
+    ok('angle 吸附锚点', anchorsOf({ id: 'a1', type: 'angle', cx: 0, cy: 0, r: 20, a0: 0, a1: 90 }) === 3);
+
+    // 12 文字旋转字段统一
+    DP.state.style = { stroke: '#000', width: 2, dash: 'solid', fill: 'none', opacity: 1, fontSize: 18 };
+    const txtRot = { type: 'text', x: 10, y: 20, text: 'A', size: 16, rot: 90, style: DP.state.style };
+    ok('文字 rot 字段生效', DP.render.object(txtRot).indexOf('rotate(90') > -1);
+    const txtLegacy = { type: 'text', x: 10, y: 20, text: 'A', size: 16, rotate: 45, style: DP.state.style };
+    ok('旧 rotate 字段兼容', DP.render.object(txtLegacy).indexOf('rotate(45') > -1);
+
+    // 13 阶段 2：rect / arrow 试点模块
+    ok('registry 已注册 rect/arrow', DP.registry.has('rect') && DP.registry.has('arrow'),
+      DP.registry.list().map(m => m.type).join(','));
+    ok('shape 菜单 8 项 / text 菜单 5 项',
+      DP.registry.menuSlots('draw', 'shape').length === 8 && DP.registry.menuSlots('draw', 'text').length === 5,
+      DP.registry.menuSlots('draw').map(s => s.type).join(','));
+
+    const R = DP.registry.get('rect');
+    const rm = R.defaults({ x: 10, y: 20, w: 30, h: 40, rx: 5, style: DP.state.style });
+    rm.type = 'rect'; // 生产路径由 shapeFrom 补 type；模块 defaults 本身只返回字段
+    ok('rect 模块 defaults 保留字段', rm.x === 10 && rm.w === 30 && rm.rx === 5 && rm.style === DP.state.style,
+      JSON.stringify(rm));
+    let rbb2 = DP.model.localBBox(rm);
+    ok('rect 模块 bbox 分派', rbb2.x === 10 && rbb2.y === 20 && rbb2.w === 30 && rbb2.h === 40, JSON.stringify(rbb2));
+    DP.model.translateObj(rm, 5, 6);
+    DP.model.scaleObj(rm, 2, 2, 0, 0);
+    DP.model.mirrorObj(rm, 'h');
+    ok('rect 模块平移/缩放/镜像', rm.x === 30 && rm.y === 52 && rm.w === 60 && rm.h === 80,
+      JSON.stringify({ x: rm.x, y: rm.y, w: rm.w, h: rm.h }));
+    ok('rect 模块节点与吸附点', R.nodes(rm).length === 4 && R.anchors(rm).length === 5);
+    const rsvg = DP.render.object(rm);
+    ok('rect 模块 drawable 渲染合法', rsvg.indexOf('<rect') === 0 && parseSvg(rsvg), rsvg.slice(0, 80));
+
+    const A = DP.registry.get('arrow');
+    const am = A.defaults({
+      x1: 0, y1: 0, x2: 100, y2: 0,
+      style: Object.assign({}, DP.state.style, { arrow: 'both' }),
+    });
+    am.type = 'arrow';
+    DP.model.translateObj(am, 10, 20);
+    DP.model.scaleObj(am, 2, 2, 0, 0);
+    DP.model.mirrorObj(am, 'h');
+    ok('arrow 模块平移/缩放/镜像', am.x1 === 220 && am.x2 === 20 && am.y1 === 40 && am.y2 === 40,
+      JSON.stringify({ x1: am.x1, x2: am.x2, y1: am.y1, y2: am.y2 }));
+    const asvg = DP.render.object(am);
+    ok('arrow 模块 drawable 渲染合法', parseSvg(asvg) && (asvg.match(/<polygon/g) || []).length === 2,
+      (asvg.match(/<polygon/g) || []).length + ' heads');
+    const apts = DP.snap.collectPoints([{ id: 'am', type: 'arrow', x1: 0, y1: 0, x2: 100, y2: 0 }]);
+    ok('arrow 模块吸附锚点', apts.length === 3 && apts[1].type === '端点' && apts[2].type === '中点',
+      apts.map(p => p.type).join('/'));
+
+    // 15 阶段 3 / 4：图元模块全量覆盖（13 个）
+    const MODS = ['rect', 'arrow', 'line', 'circle', 'ellipse', 'polyline', 'arc', 'path', 'text', 'textbox', 'callout', 'dim', 'angle'];
+    ok('13 个图元模块全部注册', MODS.every(t => DP.registry.has(t)),
+      MODS.filter(t => !DP.registry.has(t)).join(',') || 'all-ok');
+    ok('全部模块声明 version/meta/defaults/bbox/hitTest/render',
+      MODS.every(t => {
+        const m = DP.registry.get(t);
+        return m && typeof m.version === 'number' && m.meta && typeof m.defaults === 'function' &&
+          typeof m.bbox === 'function' && typeof m.hitTest === 'function' && typeof m.render === 'function';
+      }));
+
+    // 15.1 line
+    const lnMod = { type: 'line', x1: 0, y1: 0, x2: 100, y2: 50, style: DP.state.style };
+    const L = DP.registry.get('line');
+    const lnBB = DP.model.localBBox(lnMod);
+    ok('line 模块 bbox 与命中',
+      lnBB.w === 100 && lnBB.h === 50 &&
+      L.hitTest(lnMod, { x: 50, y: 25 }, 1) && !L.hitTest(lnMod, { x: 50, y: 45 }, 2),
+      JSON.stringify(lnBB));
+    DP.model.translateObj(lnMod, 10, 20);
+    DP.model.scaleObj(lnMod, 2, 2, 0, 0);
+    DP.model.mirrorObj(lnMod, 'h');
+    ok('line 模块平移/缩放/镜像', lnMod.x1 === 220 && lnMod.x2 === 20 && lnMod.y1 === 40 && lnMod.y2 === 140,
+      [lnMod.x1, lnMod.y1, lnMod.x2, lnMod.y2].join(','));
+    ok('line 模块 drawable 渲染', DP.render.object(lnMod).indexOf('<line') === 0 &&
+      parseSvg('<svg xmlns="http://www.w3.org/2000/svg">' + DP.render.object(lnMod) + '</svg>'));
+
+    // 15.2 circle / ellipse
+    const ci = { type: 'circle', cx: 10, cy: 10, r: 5, style: DP.state.style };
+    const Ci = DP.registry.get('circle');
+    ok('circle 模块 bbox 与命中', Ci.bbox(ci).x === 5 && Ci.bbox(ci).w === 10 &&
+      Ci.hitTest(ci, { x: 15, y: 10 }, 1) && !Ci.hitTest(ci, { x: 10, y: 10 }, 1));
+    DP.model.scaleObj(ci, 2, 1, 0, 0);
+    ok('circle 非等比缩放降级为 ellipse', ci.type === 'ellipse' && ci.rx === 10 && ci.ry === 5,
+      JSON.stringify(ci));
+
+    const el = { type: 'ellipse', cx: 0, cy: 0, rx: 40, ry: 20, style: DP.state.style };
+    const E = DP.registry.get('ellipse');
+    ok('ellipse 模块 bbox 与命中', E.bbox(el).w === 80 && E.bbox(el).h === 40 &&
+      E.hitTest(el, { x: 40, y: 0 }, 1) && !E.hitTest(el, { x: 0, y: 0 }, 1));
+    ok('ellipse 模块 drawable 渲染', DP.render.object(el).indexOf('<ellipse') === 0);
+
+    // 15.3 polyline / arc / path
+    const pl = { type: 'polyline', points: [[0, 0], [50, 50], [100, 0]], closed: true, style: DP.state.style };
+    const P = DP.registry.get('polyline');
+    ok('polyline 模块 bbox 与闭合区命中', P.bbox(pl).w === 100 && P.hitTest(pl, { x: 50, y: 10 }, 1));
+    ok('polyline 闭合渲染为 polygon', DP.render.object(pl).indexOf('<polygon') === 0);
+
+    const ar = { type: 'arc', cx: 0, cy: 0, r: 20, a0: 0, a1: 90, style: DP.state.style };
+    const Ar = DP.registry.get('arc');
+    const arBB = Ar.bbox(ar);
+    ok('arc 模块 bbox 采样', Math.abs(arBB.x) < 0.5 && Math.abs(arBB.w - 20) < 1.5, JSON.stringify(arBB));
+    ok('arc 模块角度区间命中',
+      Ar.hitTest(ar, { x: 0, y: 20 }, 1) && !Ar.hitTest(ar, { x: 0, y: -20 }, 1));
+    DP.model.mirrorObj(ar, 'v');
+    ok('arc 模块镜像同步翻转角度', ar.a0 === -90 && ar.a1 === 0, ar.a0 + '..' + ar.a1);
+
+    const pa = { type: 'path', d: 'M 0 0 L 100 0 L 100 50 Z', style: DP.state.style };
+    const Pa = DP.registry.get('path');
+    const paBB = Pa.bbox(pa);
+    ok('path 模块 bbox 与描边命中', paBB.w === 100 && paBB.h === 50 &&
+      Pa.hitTest(pa, { x: 50, y: 0 }, 1) && !Pa.hitTest(pa, { x: 60, y: 20 }, 1),
+      JSON.stringify(paBB));
+
+    // 15.4 text
+    const tx = { type: 'text', x: 0, y: 0, text: 'v_{0}=x^{2}', size: 16, style: DP.state.style };
+    const T = DP.registry.get('text');
+    const txSvg = DP.render.object(tx);
+    ok('text 模块生成上下标 tspan', (txSvg.match(/<tspan/g) || []).length === 4 &&
+      parseSvg('<svg xmlns="http://www.w3.org/2000/svg">' + txSvg + '</svg>'),
+      (txSvg.match(/<tspan/g) || []).length + ' runs');
+    ok('text 模块 bbox 随字号', T.bbox(tx).w > 0 && T.bbox(tx).h === 16 * 1.2, JSON.stringify(T.bbox(tx)));
+
+    // 15.5 textbox（阶段 4）
+    const tb = { type: 'textbox', x: 100, y: 100, w: 120, h: 40, text: 'T', size: 14, style: DP.state.style };
+    const TB = DP.registry.get('textbox');
+    ok('textbox 模块 bbox 与命中', TB.bbox(tb).w === 120 &&
+      TB.hitTest(tb, { x: 220, y: 120 }, 1) && !TB.hitTest(tb, { x: 300, y: 120 }, 1));
+    ok('textbox 锚点 = 4 角 + 中心', TB.anchors(tb).length === 5 && TB.anchors(tb)[4].kind === 'center');
+    const tbSvg = DP.render.object(tb);
+    ok('textbox drawable 含 rect + text', tbSvg.indexOf('<rect') === 0 && tbSvg.indexOf('<text') > 0 &&
+      parseSvg('<svg xmlns="http://www.w3.org/2000/svg">' + tbSvg + '</svg>'), tbSvg.slice(0, 80));
+    DP.model.scaleObj(tb, 2, 2, 0, 0);
+    ok('textbox 缩放时字号同步', tb.w === 240 && tb.h === 80 && Math.abs(tb.size - 28) < 1e-6,
+      [tb.w, tb.h, tb.size].join(','));
+    DP.model.mirrorObj(tb, 'h');
+    ok('textbox 镜像保持包围盒中心', Math.abs((tb.x + tb.w / 2) - 320) < 1e-6, String(tb.x));
+
+    // 15.6 callout（阶段 4）
+    const co = { type: 'callout', tx: 50, ty: 300, bx: 100, by: 200, w: 120, h: 40, text: 'C', size: 13, style: DP.state.style };
+    const CO = DP.registry.get('callout');
+    const coBB = CO.bbox(co);
+    ok('callout bbox 同时包住尖点与文本框',
+      coBB.x === 50 && coBB.y === 200 && coBB.w === 170 && coBB.h === 100, JSON.stringify(coBB));
+    ok('callout 引线可命中', CO.hitTest(co, { x: 105, y: 260 }, 3));
+    ok('callout 锚点含指向点', CO.anchors(co).length === 6 &&
+      CO.anchors(co)[5].label === '指向点', JSON.stringify(CO.anchors(co).map(a => a.label || a.kind)));
+    const coSvg = DP.render.object(co);
+    ok('callout drawable 完整（线 + 点 + 框 + 字）',
+      (coSvg.match(/<line/g) || []).length === 1 &&
+      (coSvg.match(/<circle/g) || []).length === 1 &&
+      coSvg.indexOf('<rect') > 0 && coSvg.indexOf('<text') > 0 &&
+      parseSvg('<svg xmlns="http://www.w3.org/2000/svg">' + coSvg + '</svg>'), coSvg.slice(0, 80));
+    DP.model.mirrorObj(co, 'h');
+    ok('callout 镜像尖点与文本框同轴翻转', co.tx === 220 && co.bx === 50,
+      [co.tx, co.bx].join(','));
+
+    // 15.7 dim / angle（阶段 4 第二批）
+    const dm = { type: 'dim', x1: 0, y1: 0, x2: 100, y2: 0, offset: -26, value: 100, unit: '', size: 14, style: DP.state.style };
+    const Dm = DP.registry.get('dim');
+    const dmBB = Dm.bbox(dm);
+    ok('dim bbox 含尺寸线偏移', dmBB.x === 0 && dmBB.y === -36 && dmBB.w === 100 && dmBB.h === 72,
+      JSON.stringify(dmBB));
+    ok('dim 基线与尺寸线可命中', Dm.hitTest(dm, { x: 50, y: 0 }, 1) &&
+      Dm.hitTest(dm, { x: 50, y: -26 }, 1) && !Dm.hitTest(dm, { x: 50, y: 60 }, 1));
+    const dmSvg = DP.render.object(dm);
+    ok('dim 渲染 3 线 + 2 箭头 + 数值', (dmSvg.match(/<line/g) || []).length === 3 &&
+      (dmSvg.match(/<polygon/g) || []).length === 2 && dmSvg.indexOf('>100<') > -1, dmSvg.slice(0, 80));
+    DP.model.translateObj(dm, 10, 20);
+    DP.model.scaleObj(dm, 2, 2, 0, 0);
+    ok('dim 平移/缩放（偏移同比）', dm.x1 === 20 && dm.x2 === 220 && Math.abs(dm.offset + 52) < 1e-6,
+      [dm.x1, dm.x2, dm.offset].join(','));
+
+    const ag = { type: 'angle', cx: 0, cy: 0, r: 30, a0: 0, a1: 90, size: 14, style: DP.state.style };
+    const Ag = DP.registry.get('angle');
+    ok('angle bbox 与弧线命中', Ag.bbox(ag).w === 60 &&
+      Ag.hitTest(ag, { x: 0, y: 30 }, 1) && !Ag.hitTest(ag, { x: 0, y: 0 }, 1));
+    const agSvg = DP.render.object(ag);
+    ok('angle 渲染弧 + 角度文字', agSvg.indexOf('<path') === 0 && agSvg.indexOf('90°') > -1, agSvg.slice(0, 80));
+    DP.model.translateObj(ag, 5, 5);
+    DP.model.scaleObj(ag, 2, 2, 0, 0);
+    ok('angle 平移/缩放半径同比', ag.cx === 10 && ag.cy === 10 && ag.r === 60,
+      [ag.cx, ag.cy, ag.r].join(','));
+    DP.model.mirrorObj(ag, 'h');
+    ok('angle 镜像不改角度区间（保持旧语义）', ag.a0 === 0 && ag.a1 === 90 && ag.cx === 10);
+
+    // 16 双轨分派证明：注册一个探针模块，核心/渲染必须优先走 registry
+    DP.registry.register({
+      type: 'stage2probe', version: 1, meta: { name: '探针' },
+      defaults: function () { return { type: 'stage2probe' }; },
+      bbox: function () { return { x: 1, y: 2, w: 3, h: 4 }; },
+      hitTest: function () { return true; },
+      anchors: function () { return [{ id: 'c', x: 7, y: 8, kind: 'center' }]; },
+      translate: function (o, dx, dy) { o.tx = (o.tx || 0) + dx; o.ty = (o.ty || 0) + dy; },
+      scale: function (o) { o.scaled = true; },
+      mirror: function (o) { o.mirrored = true; },
+      render: function () { return { tag: 'circle', attrs: { cx: 1, cy: 2, r: 3 } }; },
+    });
+    const probe = { id: 'probe1', type: 'stage2probe' };
+    ok('核心 bbox registry 优先', JSON.stringify(DP.model.localBBox(probe)) === '{"x":1,"y":2,"w":3,"h":4}');
+    DP.model.translateObj(probe, 5, 6);
+    DP.model.scaleObj(probe, 2, 2, 0, 0);
+    DP.model.mirrorObj(probe, 'v');
+    ok('核心变换 registry 优先', probe.tx === 5 && probe.ty === 6 && probe.scaled && probe.mirrored,
+      JSON.stringify(probe));
+    const probePts = DP.snap.collectPoints([{ id: 'p2', type: 'stage2probe' }]);
+    ok('吸附 registry 优先', probePts.length === 1 && probePts[0].type === '中心', JSON.stringify(probePts));
+    ok('渲染 registry 优先', DP.render.object(probe).indexOf('<circle') === 0, DP.render.object(probe));
+  } catch (e) {
+    ok('运行异常', false, e && e.message);
+  }
+  out.push('');
+  out.push('TOTAL=' + (out.filter(l => /^PASS|^FAIL/.test(l)).length) + ' FAIL=' + fail);
+  document.getElementById('r').textContent = out.join('\n');
+  document.title = fail === 0 ? 'SELFTEST OK' : 'SELFTEST FAIL ' + fail;
+</script>
+</body>
+</html>

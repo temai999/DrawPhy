@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DrawPhy 交互自检</title>
+<link rel="stylesheet" href="../assets/editor.css">
+<style>
+  #board { position: absolute; left: 0; top: 0; width: 900px; height: 600px; }
+  #stageWrap { position: relative; width: 900px; height: 600px; }
+  #props, #partGrid, #toolList, #partTabs { position: absolute; left: -9999px; }
+  pre { position: absolute; left: 0; top: 620px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="stageWrap">
+  <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+<input id="inlineText" class="inline-text" hidden>
+<div id="toast"></div>
+<div id="hint"></div>
+<span id="zoomLabel"></span>
+<div id="toolList"></div>
+<div id="partDrawer" class="open"><div class="drawer-head"><input id="partSearch"></div><div class="drawer-body"><nav id="drawerCats"></nav><div id="drawerGrid"></div></div></div>
+<div id="drawerMask"></div>
+<button id="btnParts"></button><button id="drawerClose"></button>
+<div id="props"></div>
+<button id="btnUndo"></button><button id="btnRedo"></button><button id="btnFit"></button>
+<button id="btnNew"></button><button id="btnOpen"></button><button id="btnSave"></button>
+<button id="btnPng"></button><button id="btnSvg"></button><button id="btnCopy"></button>
+<input type="checkbox" id="bgToggle" checked><input type="checkbox" id="snapToggle" checked>
+<input type="file" id="fileInput" hidden>
+<pre id="r"></pre>
+
+<script src="../src/core/config.js"></script>
+<script src="../src/core/module-wrap.js"></script>
+<script src="../src/core/registry.js"></script>
+<script src="../src/core/eventbus.js"></script>
+<script src="../src/core.js"></script>
+<script src="../src/modules/primitives/rect.js"></script>
+<script src="../src/modules/primitives/arrow.js"></script>
+<script src="../src/modules/primitives/line.js"></script>
+<script src="../src/modules/primitives/circle.js"></script>
+<script src="../src/modules/primitives/ellipse.js"></script>
+<script src="../src/modules/primitives/polyline.js"></script>
+<script src="../src/modules/primitives/arc.js"></script>
+<script src="../src/modules/primitives/path.js"></script>
+<script src="../src/modules/primitives/text.js"></script>
+<script src="../src/modules/primitives/textbox.js"></script>
+<script src="../src/modules/primitives/callout.js"></script>
+<script src="../src/modules/primitives/dim.js"></script>
+<script src="../src/modules/primitives/angle.js"></script>
+<script src="../src/parts.js"></script>
+<script src="../src/render.js"></script>
+<script src="../src/ui.js"></script>
+<script src="../src/io.js"></script>
+<script>
+(function () {
+  const out = [];
+  let pass = 0, fail = 0;
+  function t(name, ok, extra) {
+    if (ok) { pass++; out.push('PASS  ' + name); }
+    else { fail++; out.push('FAIL  ' + name + '   ' + (extra == null ? '' : extra)); }
+  }
+  try { localStorage.clear(); } catch (e) {}
+
+  const board = document.getElementById('board');
+  DP.state.view = { x: 0, y: 0, k: 1 };
+  DP.state.page = { w: 900, h: 600, bg: '#fff', grid: false };
+  DP.state.snap = { grid: false, gridSize: 20, anchors: false };
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  /* 测试夹具：真实页面里部件按钮由 ribbon 动态生成，这里放一枚静态按钮验证拖入链路 */
+  (function () {
+    const b = document.createElement('button');
+    b.className = 'part';
+    b.dataset.part = 'battery';
+    document.body.appendChild(b);
+  })();
+  DP.ui.init();
+  DP.state.view = { x: 0, y: 0, k: 1 };
+  DP.ui.render();
+
+  function rect() { return board.getBoundingClientRect(); }
+  function pe(type, wx, wy, opts) {
+    const r = rect();
+    board.dispatchEvent(new PointerEvent(type, Object.assign({
+      bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse',
+      button: 0, buttons: type === 'pointerup' ? 0 : 1,
+      clientX: r.left + wx, clientY: r.top + wy,
+    }, opts || {})));
+  }
+  function click(wx, wy) { pe('pointerdown', wx, wy); pe('pointerup', wx, wy); }
+  function drag(x1, y1, x2, y2, opts) {
+    pe('pointerdown', x1, y1, opts);
+    pe('pointermove', (x1 + x2) / 2, (y1 + y2) / 2, opts);
+    pe('pointermove', x2, y2, opts);
+    pe('pointerup', x2, y2, opts);
+  }
+  function mkPart(pid, cx, cy) {
+    const def = DP.parts.byId[pid];
+    const o = { id: 'P' + (DP.state.objects.length + 1), type: 'part', partId: pid, x: cx - def.w / 2, y: cy - def.h / 2, s: 1, rot: 0, flip: false, style: Object.assign({}, DP.state.style) };
+    DP.state.objects.push(o);
+    return o;
+  }
+
+  /* ---------- 1. 部件库规模与结构 ---------- */
+  t('部件总数 ≥ 70', DP.parts.list.length >= 70, 'count=' + DP.parts.list.length);
+  const ids = DP.parts.list.map((p) => p.id);
+  t('部件 id 唯一', new Set(ids).size === ids.length, 'dup=' + (ids.length - new Set(ids).size));
+  t('每个部件都有图元', DP.parts.list.every((p) => p.shapes && p.shapes.length > 0));
+  t('十一大分类齐全', DP.parts.cats.length === 11 && DP.parts.cats.every((c) => DP.parts.list.some((p) => p.cat === c)), DP.parts.cats.join('/'));
+  const badSize = DP.parts.list.filter((p) => !(p.w > 0 && p.h > 0)).map((p) => p.id);
+  t('部件尺寸合法', badSize.length === 0, badSize.join(','));
+
+  /* ---------- 2. 从部件库拖到画布 ---------- */
+  const before = DP.state.objects.length;
+  const btn = document.querySelector('.part');
+  t('部件按钮已渲染', !!btn);
+  if (btn) {
+    const pid = btn.dataset.part;
+    btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 3, button: 0, clientX: 20, clientY: 20 }));
+    window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 3, clientX: 300, clientY: 200 }));
+    const ghost = document.querySelector('.drag-ghost');
+    t('拖拽过程中出现半透明预览', !!ghost);
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 3, clientX: 300, clientY: 200 }));
+    const last = DP.state.objects[DP.state.objects.length - 1];
+    t('松手后落下一个部件', DP.state.objects.length === before + 1 && last.type === 'part' && last.partId === pid, last && last.partId);
+    t('拖放后自动切到选择工具', DP.state.tool === 'select', DP.state.tool);
+  }
+
+  /* ---------- 3. 拖动移动对象 ---------- */
+  DP.ui.setTool('select');
+  let p = mkPart('battery', 300, 300);
+  DP.ui.render();
+  const bx0 = p.x;
+  click(300, 300);           // 选中
+  t('点击可选中部件', DP.state.selection.has(p.id));
+  drag(300, 300, 360, 340);
+  t('拖动使部件位移', Math.abs(p.x - bx0 - 60) <= 10, 'dx=' + Math.round(p.x - bx0));
+  const dxMove = Math.round(p.x - bx0);
+
+  /* ---------- 4. Alt 拖动 = 拖动复制 ---------- */
+  const n0 = DP.state.objects.length;
+  drag(360 + 0, 340, 400, 380, { altKey: true });
+  t('Alt+拖动复制出一份', DP.state.objects.length === n0 + 1, 'n=' + (DP.state.objects.length - n0));
+
+  /* ---------- 5. 端点拖动 + 粘附 ---------- */
+  DP.state.snap.anchors = true;
+  DP.state.snap.grid = false;
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  p = mkPart('battery', 300, 300);      // 中心 300,300
+  const line = { id: 'L1', type: 'line', x1: 100, y1: 300, x2: 280, y2: 300, style: Object.assign({}, DP.state.style) };
+  DP.state.objects.push(line);
+  DP.ui.render();
+  click(190, 300);                       // 选中线
+  t('选中线段', DP.state.selection.has('L1'), [...DP.state.selection].join(','));
+  drag(280, 300, 302, 300);              // 拖右端点靠近部件中心
+  t('端点可拖动到锚点', Math.abs(line.x2 - 300) <= 9, 'x2=' + Math.round(line.x2));
+  t('端点自动粘附到宿主', !!(line.bind && line.bind.x2 && line.bind.x2.id === p.id), line.bind ? JSON.stringify(line.bind.x2) : 'none');
+
+  /* ---------- 6. 移动宿主，端点跟随 ---------- */
+  click(300, 288);                       // 点部件（避开线）
+  t('选中宿主部件', DP.state.selection.has(p.id), [...DP.state.selection].join(','));
+  const lx2 = line.x2;
+  drag(300, 288, 330, 288);
+  t('移动部件时端点跟随', Math.abs(line.x2 - lx2 - 30) <= 10, 'delta=' + Math.round(line.x2 - lx2));
+
+  /* ---------- 7. 旋转手柄 ---------- */
+  const bb = DP.model.localBBox(p);
+  const cx = bb.x + bb.w / 2, cy = bb.y + bb.h / 2;
+  click(cx, cy - 12);                    // 点部件本体（避开线段端点）
+  t('选中部件本体', DP.state.selection.has(p.id));
+  drag(cx, bb.y - 26, cx + 50, cy);
+  t('旋转手柄改变角度', Math.abs(Math.abs(p.rot) - 90) <= 12, 'rot=' + Math.round(p.rot));
+
+  /* ---------- 7.5 P0 命中：textbox / callout / path ---------- */
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  DP.state.snap.grid = false;
+  DP.state.snap.anchors = false;
+  const style = Object.assign({}, DP.state.style);
+  DP.state.objects.push(
+    { id: 'TB1', type: 'textbox', x: 100, y: 400, w: 120, h: 36, text: 'T', size: 14, style },
+    { id: 'CO1', type: 'callout', tx: 100, ty: 500, bx: 150, by: 520, w: 100, h: 30, text: 'C', size: 13, style },
+    { id: 'BZ1', type: 'path', d: 'M 100 300 Q 150 250 200 300', style }
+  );
+  DP.ui.render();
+  click(160, 418);
+  t('文本框可点选', DP.state.selection.has('TB1'), [...DP.state.selection].join(','));
+  click(200, 535);
+  t('标注可点选', DP.state.selection.has('CO1'), [...DP.state.selection].join(','));
+  click(150, 275);
+  t('贝塞尔曲线可点选', DP.state.selection.has('BZ1'), [...DP.state.selection].join(','));
+  drag(150, 275, 170, 295);
+  const bzBB = DP.model.localBBox(DP.state.objects.find((o) => o.id === 'BZ1'));
+  t('贝塞尔曲线可拖动', Math.abs(bzBB.x - 120) <= 2 && Math.abs(bzBB.y - 295) <= 2, JSON.stringify(bzBB));
+
+  /* ---------- 7.6 阶段 2：rect/arrow 模块创建、命中、节点、移动 ---------- */
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  DP.state.snap.grid = false;
+  DP.state.snap.anchors = false;
+  const rectMod = DP.registry.get('rect');
+  const arrowMod = DP.registry.get('arrow');
+  t('交互页已加载 rect/arrow 模块', !!rectMod && !!arrowMod, DP.registry.list().map((m) => m.type).join(','));
+
+  let rectDefaultsCalls = 0;
+  const rectDefaults = rectMod.defaults;
+  rectMod.defaults = function (props) { rectDefaultsCalls++; return rectDefaults(props); };
+  DP.ui.setTool('rect');
+  drag(100, 100, 220, 180);
+  rectMod.defaults = rectDefaults;
+  const ro = DP.state.objects[DP.state.objects.length - 1];
+  t('矩形由 registry 模块工厂创建', rectDefaultsCalls >= 1 && ro && ro.type === 'rect',
+    'calls=' + rectDefaultsCalls + ' type=' + (ro && ro.type));
+  t('矩形几何正确', ro && Math.abs(ro.x - 100) <= 1 && Math.abs(ro.y - 100) <= 1 &&
+    Math.abs(ro.w - 120) <= 1 && Math.abs(ro.h - 80) <= 1,
+    ro && [ro.x, ro.y, ro.w, ro.h].map(Math.round).join(','));
+
+  DP.ui.setTool('select');
+  click(160, 140);
+  t('矩形模块可点选', DP.state.selection.has(ro.id), [...DP.state.selection].join(','));
+  drag(220, 180, 260, 220);
+  t('矩形模块节点可缩放', Math.abs(ro.w - 160) <= 2 && Math.abs(ro.h - 120) <= 2,
+    Math.round(ro.w) + 'x' + Math.round(ro.h));
+
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  let arrowDefaultsCalls = 0;
+  const arrowDefaults = arrowMod.defaults;
+  arrowMod.defaults = function (props) { arrowDefaultsCalls++; return arrowDefaults(props); };
+  DP.ui.setTool('arrow');
+  drag(100, 300, 240, 360);
+  arrowMod.defaults = arrowDefaults;
+  const ao = DP.state.objects[DP.state.objects.length - 1];
+  t('箭头由 registry 模块工厂创建', arrowDefaultsCalls >= 1 && ao && ao.type === 'arrow',
+    'calls=' + arrowDefaultsCalls + ' type=' + (ao && ao.type));
+  t('单箭头样式', ao && ao.style.arrow === 'end', ao && ao.style.arrow);
+  t('箭头 SVG 由 drawable 输出', (DP.render.object(ao).match(/<polygon/g) || []).length === 1,
+    DP.render.object(ao).slice(0, 100));
+
+  DP.ui.setTool('darrow');
+  drag(100, 450, 240, 450);
+  const dao = DP.state.objects[DP.state.objects.length - 1];
+  t('双箭头样式', dao && dao.type === 'arrow' && dao.style.arrow === 'both', dao && dao.style.arrow);
+  t('双箭头渲染两个箭头头', (DP.render.object(dao).match(/<polygon/g) || []).length === 2,
+    (DP.render.object(dao).match(/<polygon/g) || []).length + ' heads');
+
+  DP.ui.setTool('select');
+  click(170, 330);
+  t('箭头模块可点选', DP.state.selection.has(ao.id), [...DP.state.selection].join(','));
+  const ax0 = ao.x1, ay0 = ao.y1;
+  drag(170, 330, 190, 350);
+  t('箭头模块可拖动移动', Math.abs(ao.x1 - ax0 - 20) <= 2 && Math.abs(ao.y1 - ay0 - 20) <= 2,
+    'd=' + Math.round(ao.x1 - ax0) + ',' + Math.round(ao.y1 - ay0));
+
+  /* ---------- 7.7 阶段 4：textbox / callout 模块命中与拖动 ---------- */
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  const tbMod = DP.registry.get('textbox');
+  const coMod = DP.registry.get('callout');
+  const dimMod = DP.registry.get('dim');
+  const angMod = DP.registry.get('angle');
+  t('交互页已加载 13 个图元模块', !!tbMod && !!coMod && !!dimMod && !!angMod && DP.registry.list().length >= 13,
+    DP.registry.list().map((m) => m.type).join(','));
+
+  const tb = { id: 'TB2', type: 'textbox', x: 100, y: 400, w: 120, h: 36, text: 'T', size: 14, style: Object.assign({}, DP.state.style) };
+  const co = { id: 'CO2', type: 'callout', tx: 100, ty: 520, bx: 150, by: 500, w: 100, h: 30, text: 'C', size: 13, style: Object.assign({}, DP.state.style) };
+  DP.state.objects.push(tb, co);
+  DP.ui.render();
+
+  click(160, 418);
+  t('文本框经模块命中可点选', DP.state.selection.has('TB2'), [...DP.state.selection].join(','));
+  drag(160, 418, 180, 438);
+  t('文本框经模块可拖动', Math.abs(tb.x - 120) <= 2 && Math.abs(tb.y - 420) <= 2, tb.x + ',' + tb.y);
+
+  click(200, 515);
+  t('标注经模块命中可点选', DP.state.selection.has('CO2'), [...DP.state.selection].join(','));
+  drag(200, 515, 220, 535);
+  t('标注经模块可拖动', Math.abs(co.tx - 120) <= 2 && Math.abs(co.bx - 170) <= 2, co.tx + ',' + co.bx);
+
+  /* ---------- 7.8 阶段 4 第二批：dim / angle 模块 ---------- */
+  DP.ui.setTool('dim');
+  click(100, 200);
+  click(200, 200);
+  const dimObj = DP.state.objects[DP.state.objects.length - 1];
+  const dimSvg = dimObj ? DP.render.object(dimObj) : '';
+  t('尺寸标注可创建且由模块渲染', dimObj && dimObj.type === 'dim' &&
+    (dimSvg.match(/<polygon/g) || []).length === 2, dimSvg.slice(0, 60));
+
+  DP.ui.setTool('select');
+  click(150, 174);                       // offset -26 → 尺寸线 y=174
+  t('尺寸标注经模块命中可点选', dimObj && DP.state.selection.has(dimObj.id),
+    [...DP.state.selection].join(','));
+
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  DP.ui.setTool('angle');
+  click(300, 300);                       // 顶点
+  click(360, 300);                       // 半径 + 起始边
+  click(300, 360);                       // 终止边
+  const angObj = DP.state.objects[DP.state.objects.length - 1];
+  t('角度标记可创建且由模块渲染', angObj && angObj.type === 'angle' &&
+    DP.render.object(angObj).indexOf('<path') === 0, angObj && angObj.type);
+  DP.ui.setTool('select');
+  click(360, 300);                       // 弧起点 (r=60, a=0)
+  t('角度标记经模块命中可点选', angObj && DP.state.selection.has(angObj.id),
+    [...DP.state.selection].join(','));
+
+  /* ---------- 8. 渲染成 SVG ---------- */
+  DP.state.objects = [mkPart('battery', 300, 300)];
+  DP.state.selection = new Set();
+  DP.ui.render();
+  const svg = board.innerHTML;
+  t('渲染输出包含部件组', svg.indexOf('<g transform="matrix(') > -1);
+  t('部件 SVG 合法（标签配平）', (svg.match(/<g[\s>]/g) || []).length === (svg.match(/<\/g>/g) || []).length,
+    'open=' + (svg.match(/<g[\s>]/g) || []).length + ' close=' + (svg.match(/<\/g>/g) || []).length);
+
+  /* ---------- 9. 撤销恢复 ---------- */
+  const beforeUndo = DP.state.objects.length;
+  DP.history.undo();
+  t('撤销可用', DP.state.objects.length >= beforeUndo - 1);
+
+  out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
+  document.getElementById('r').textContent = out.join('\n');
+  document.title = 'RESULT ' + pass + '/' + (pass + fail);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EE 绘图与部件能力复刻调研报告 · DrawPhy</title>
+<style>
+  :root{
+    --ink:#1c2733; --sub:#5f6e7d; --faint:#93a0ac;
+    --line:#e2e8ef; --bg:#f6f8fa; --card:#fff;
+    --accent:#0f766e; --accent2:#0b5f59; --warm:#b45309; --blue:#0a84ff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.85 "Microsoft YaHei","PingFang SC","Segoe UI",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{max-width:1040px;margin:0 auto;padding:44px 26px 80px}
+  header.top{border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:30px}
+  .kicker{font-size:12px;letter-spacing:3px;color:var(--faint);text-transform:uppercase}
+  h1{font-size:30px;line-height:1.35;margin:10px 0 8px;letter-spacing:-.5px}
+  .meta{font-size:13px;color:var(--sub);display:flex;gap:18px;flex-wrap:wrap}
+  .meta i{font-style:normal;color:var(--faint)}
+
+  .lede{
+    background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);
+    padding:18px 22px;border-radius:8px;margin:0 0 34px;
+  }
+  .lede p{margin:0 0 10px}
+  .lede p:last-child{margin:0}
+  .lede b{color:var(--accent2)}
+
+  h2{font-size:20px;margin:48px 0 14px;padding-left:12px;border-left:4px solid var(--accent);line-height:1.4}
+  h3{font-size:15px;margin:26px 0 8px;color:var(--accent2)}
+  p{margin:0 0 14px}
+  .note{font-size:13px;color:var(--sub);background:#fff;border:1px dashed var(--line);border-radius:6px;padding:10px 14px;margin:14px 0}
+  code{font-family:ui-monospace,Consolas,"Cascadia Mono",monospace;font-size:.92em;background:#eef2f6;padding:1px 5px;border-radius:4px}
+  pre{background:#0f1720;color:#dbe6f0;padding:16px 18px;border-radius:8px;overflow-x:auto;font-size:12.5px;line-height:1.7}
+  pre .k{color:#7dd3c0} pre .s{color:#f0b27a} pre .c{color:#7b8b99}
+
+  table{width:100%;border-collapse:collapse;background:var(--card);font-size:13.5px;margin:12px 0 6px}
+  th,td{border-bottom:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  th{background:#eef3f4;font-weight:700;font-size:12.5px;color:#33404d;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  td code{background:#f4f7fa}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:999px;white-space:nowrap}
+  .t-ok{background:#e6f4ef;color:#0b6b4f;border:1px solid #bfe3d6}
+  .t-part{background:#fdf1e3;color:#96500a;border:1px solid #f2d6b4}
+  .t-no{background:#f2f4f7;color:#68757f;border:1px solid #dde3ea}
+
+  figure{margin:26px 0 10px}
+  figcaption{font-size:12.5px;color:var(--sub);margin-top:8px}
+  .fig-box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;overflow-x:auto}
+
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0 6px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+  .card h4{margin:0 0 6px;font-size:13.5px;color:var(--accent2)}
+  .card p{margin:0;font-size:13px;color:var(--sub);line-height:1.7}
+
+  ul,ol{margin:0 0 16px;padding-left:22px}
+  li{margin-bottom:7px}
+  .kv{font-size:13px;color:var(--sub)}
+  footer.end{margin-top:56px;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--faint)}
+  @media (max-width:760px){ .cards{grid-template-columns:1fr} h1{font-size:24px} }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="top">
+  <div class="kicker">DrawPhy · 技术调研</div>
+  <h1>复刻 EE 的「绘图 + 部件」能力：<br>把科学制图做成一个可快速出图的网页编辑器</h1>
+  <div class="meta">
+    <span>版本 <i>v1.0</i></span>
+    <span>日期 <i>2026-11-04</i></span>
+    <span>范围 <i>EE 绘图与部件 → Web 编辑器 → 可导出图片</i></span>
+    <span>交付 <i>本报告 + 可运行代码（D:\Trae CN\myPro\DrawPhy）</i></span>
+  </div>
+</header>
+
+<div class="lede">
+  <p><b>一句话结论：</b>EE 好用的不是「功能多」，而是把三种能力缝在一起——<b>徒手就画</b>（零参数建模）、<b>智能几何</b>（自动捕捉端点/交点/切线，画完即准）、<b>部件即积木</b>（符号可拖入、可改色、可缩放不糊）。三者共同把「画一张物理图」的时间压到几十秒。</p>
+  <p><b>技术结论：</b>这个体验可以在浏览器里复刻，且<b>不需要引入框架或构建工具</b>。选 <b>SVG 场景图 + 参数化部件 + 自带捕捉引擎</b>，一套模型同时喂给画板、缩略图和导出管线，矢量导出与 2×/4× PNG 都免费获得。</p>
+  <p><b>当前状态：</b>代码已落地并跑通——<b>87 个部件 / 6 类、17 个工具、完整拖动体系</b>；17 项逻辑自检、22 项交互自检（合成指针事件跑真实拖动链路）与 PNG 光栅化全部通过。布尔运算与普通图形的任意角度旋转仍属二期（见第 8 节）。</p>
+</div>
+
+<h2>1. EE 的能力拆解：四层模型</h2>
+
+<p>把 EE 的绘图能力按「越往下越像基础设施」的顺序拆成四层，复刻时就能逐层对齐，而不是对着截图仿界面。这个拆解是我在复刻过程中形成的工作模型，用于指导实现优先级；EE 内部实现细节并未公开，因此下文只描述<b>可观察到的交互与结果</b>。</p>
+
+<figure>
+  <div class="fig-box">
+    <svg viewBox="0 0 940 330" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft YaHei',sans-serif">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L10 5 L0 10 Z" fill="#0f766e"/>
+        </marker>
+      </defs>
+      <!-- 四层 -->
+      <g>
+        <rect x="40" y="24" width="860" height="56" rx="8" fill="#e6f4f1" stroke="#bfe3d6"/>
+        <text x="60" y="49" font-size="13" fill="#0b5f59" font-weight="700">④ 输出层</text>
+        <text x="60" y="69" font-size="12" fill="#3d5a57">整页导出 · 区域导出 · 剪贴板复制 · 分辨率倍率 · 矢量(SVG/EMF) · 背景透明</text>
+        <text x="810" y="57" font-size="11" fill="#6b8b87">决定「能不能直接用进课件」</text>
+      </g>
+      <g>
+        <rect x="40" y="94" width="860" height="56" rx="8" fill="#ffffff" stroke="#e2e8ef"/>
+        <text x="60" y="119" font-size="13" fill="#1c2733" font-weight="700">③ 部件层</text>
+        <text x="60" y="139" font-size="12" fill="#5f6e7d">分类部件库 · 符号可改色/缩放/翻转 · 整体选择 · 与图形同层级 · 可组合成装置</text>
+        <text x="700" y="127" font-size="11" fill="#93a0ac">降低「画器材」的固定成本</text>
+      </g>
+      <g>
+        <rect x="40" y="164" width="860" height="56" rx="8" fill="#ffffff" stroke="#e2e8ef"/>
+        <text x="60" y="189" font-size="13" fill="#1c2733" font-weight="700">② 几何层</text>
+        <text x="60" y="209" font-size="12" fill="#5f6e7d">栅格/正交吸附 · 端点·中点·圆心·象限·交点捕捉 · 相切/垂直/平行/等长自动关系 · 修剪与延伸</text>
+        <text x="700" y="197" font-size="11" fill="#93a0ac">画完即准，返工最少</text>
+      </g>
+      <g>
+        <rect x="40" y="234" width="860" height="56" rx="8" fill="#ffffff" stroke="#e2e8ef"/>
+        <text x="60" y="259" font-size="13" fill="#1c2733" font-weight="700">① 对象层</text>
+        <text x="60" y="279" font-size="12" fill="#5f6e7d">线/折线/矩形/圆/椭圆/圆弧/自由曲线/文字/箭头/标注/角度标记 · 统一的选择、层级、群组、撤销</text>
+        <text x="700" y="267" font-size="11" fill="#93a0ac">一切编辑都是「改对象」</text>
+      </g>
+      <!-- 左侧箭头 -->
+      <g stroke="#0f766e" stroke-width="2">
+        <line x1="22" y1="26" x2="22" y2="288" marker-end="url(#ar)"/>
+      </g>
+      <text x="12" y="160" font-size="11" fill="#0f766e" transform="rotate(-90 12 160)" text-anchor="middle">越往上越贴近教师动作</text>
+      <!-- 交互标注 -->
+      <g>
+        <rect x="40" y="304" width="860" height="20" fill="none"/>
+        <text x="60" y="318" font-size="11.5" fill="#93a0ac">核心不是四层各自多强，而是层间摩擦为零：捕捉结果直接成为对象几何，部件直接成为对象，对象直接进入导出。</text>
+      </g>
+    </svg>
+  </div>
+  <figcaption>图 1　EE 绘图能力的四层模型（用于指导复刻顺序：对象层 → 几何层 → 部件层 → 输出层）</figcaption>
+</figure>
+
+<h3>1.1 三个真正决定效率的设计选择</h3>
+<ul>
+  <li><b>先选工具、再落笔，不要弹参数框。</b>教师的动作是「我要画一条线」，不是「创建一个 LineObject 并填写 x1,y1,x2,y2」。EE 的所有绘制都是拖动即出，属性事后在侧栏改——这与「先参数后图形」的 CAD 范式相反，也是它比 CAD 快的原因。</li>
+  <li><b>几何关系在落笔时自动成立。</b>用户不需要知道「约束」这个词：靠近端点就贴上去，方向接近水平就锁正交，两线交叉处可直接从交点起笔。这层「隐性约束」是复刻的第一优先级，而不是图层、样式之类。</li>
+  <li><b>部件是「可改的单色符号」，不是图片。</b>同一个电池符号既能当电路元件，也能被整体染成红色表示断开位置；缩放后线宽不糊。用位图贴图会立刻失去这两个能力。</li>
+</ul>
+
+<div class="note">
+  说明：本节及下表中的「EE 做法」是对其公开文档与典型使用方式的能力归纳，并非对 EE 内部实现的反编译结论；个别细节（例如部件是否支持参数联动）以你实际使用为准，若与实际不符，我可以按你的口径修正后重出一版对照表。
+</div>
+
+<h2>2. 能力对照：EE 交互 → Web 实现 → 本项目状态</h2>
+
+<p>下表是复刻的主账本。第三列的状态与代码一一对应，不是「计划」。凡标 <span class="tag t-part">部分</span> 的，第 8 节写明了具体边界。</p>
+
+<table>
+  <thead>
+    <tr><th style="width:23%">能力</th><th style="width:34%">EE 侧的交互范式</th><th style="width:27%">Web 侧实现方式</th><th style="width:16%">状态</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>基本图元</td><td>线/折线/矩形/圆/椭圆/弧/自由曲线，拖动即出</td><td>同构对象模型 + SVG 图元映射</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>箭头与力矢量</td><td>带箭头的线段，箭头随线宽自适应</td><td><code>arrow</code> 类型，箭头三角按角度生成</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>文字与上下标</td><td>图内文字，支持物理量上下标</td><td><code>v_{0}</code>、<code>x^{2}</code> 解析成 tspan</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>尺寸标注</td><td>两点生成尺寸线，带延伸线与箭头</td><td><code>dim</code> 对象，法向偏移可调</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>角度标记</td><td>顶点 + 两射线，弧 + 度数</td><td><code>angle</code> 对象，三点交互</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>徒手绘制</td><td>按住拖动，自动平滑成曲线</td><td>采点 + RDP 抽稀成折线</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>栅格 / 正交吸附</td><td>默认磁吸，方向接近水平/垂直即锁定</td><td>栅格取整 + 3° 正交磁吸 + Shift 15°</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>对象捕捉</td><td>端点/中点/圆心/象限点/交点</td><td>候选点池 + 距离评分（几何锚点优先于栅格）</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>切点 / 垂足捕捉</td><td>自动求切线与垂线并落点</td><td>未接入（可基于 <code>segCircle</code>/<code>lineLine</code> 扩展）</td><td><span class="tag t-no">未实现</span></td></tr>
+    <tr><td>修剪</td><td>点哪段删哪段，被别的线打断</td><td>求全部交点参数，按区间切段重建</td><td><span class="tag t-part">仅直线</span></td></tr>
+    <tr><td>擦除</td><td>拖过即删对象</td><td>拖拽路径命中删除</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>填充</td><td>闭合区域上色</td><td>对闭合图元切换 fill；部件整体染色</td><td><span class="tag t-part">无种子填充</span></td></tr>
+    <tr><td>选择与变换</td><td>点选/框选、移动、缩放、镜像、拖动复制</td><td>包围盒四角手柄 + Shift 等比；H/V 镜像；Alt/Ctrl 拖动复制；Shift 拖锁轴向</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>任意角度旋转</td><td>整体绕心旋转</td><td>部件可用旋转手柄自由旋转（Shift 15°）；矩形/椭圆等普通图形仅 90° 步进</td><td><span class="tag t-part">图形受限</span></td></tr>
+    <tr><td>群组与层级</td><td>组合、置顶置底</td><td><code>group</code> 标识 + 数组顺序即 z-order</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>对齐分布</td><td>多对象对齐</td><td>六向对齐（无等距分布）</td><td><span class="tag t-part">缺分布</td></tr>
+    <tr><td>布尔运算</td><td>并/差/交，用于不规则区域</td><td>需要多边形裁剪库，未引入</td><td><span class="tag t-no">未实现</span></td></tr>
+    <tr><td>部件库</td><td>分类符号库，拖入即用</td><td>参数化图元拼装，87 个部件 / 6 类；按住可直接拖进画布</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>部件缩放改色</td><td>整体缩放、统一改线色</td><td>矩阵变换 + 继承实例样式</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>控制器 / 占位符</td><td>部件可绑定参数（如可变电阻）</td><td>未实现，属于「部件 × 数据」二期</td><td><span class="tag t-no">未实现</span></td></tr>
+    <tr><td>导出图片</td><td>PNG 可设倍率、可透明背景</td><td>SVG 序列化 → Blob → Image → Canvas → PNG</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>矢量导出</td><td>导出矢量便于放大印刷</td><td>直接下载自序列化 SVG</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>剪贴板</td><td>复制图片直接粘进文档</td><td><code>ClipboardItem</code>，本地 file:// 限制时回退下载</td><td><span class="tag t-part">环境受限</span></td></tr>
+    <tr><td>工程保存</td><td>源文件可再编辑</td><td>JSON 工程 + localStorage 自动草稿</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>撤销重做</td><td>无限步</td><td>快照栈（上限 80 步）</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>页面/画板</td><td>固定画布尺寸，超界裁切</td><td>可改宽高，导出按页面裁切</td><td><span class="tag t-ok">已实现</span></td></tr>
+    <tr><td>多页 / 图层管理</td><td>多页课件、图层</td><td>未实现</td><td><span class="tag t-no">未实现</span></td></tr>
+  </tbody>
+</table>
+
+<h2>3. 技术选型：为什么是 SVG 场景图，而不是 Canvas</h2>
+
+<p>这是整个复刻里唯一一个「选错就要重写」的决定。三条硬指标：<b>矢量导出</b>、<b>文字清晰</b>、<b>对象可被精确命中与捕捉</b>。Canvas 在前两条上都要额外补课（文字锚点要自己算、导出矢量要重画），而 SVG 天生自带。</p>
+
+<table>
+  <thead><tr><th style="width:18%">维度</th><th style="width:41%">SVG 场景图（采用）</th><th style="width:41%">Canvas 2D</th></tr></thead>
+  <tbody>
+    <tr><td>矢量导出</td><td>DOM 即矢量，序列化即为 SVG 文件</td><td>需自建矢量导出器，或只能出位图</td></tr>
+    <tr><td>文字与上下标</td><td>浏览器排版，tspan 原生支持</td><td>手写排版，上下标需逐字测宽</td></tr>
+    <tr><td>命中与捕捉</td><td>几何在模型里，命中算数学而不是像素</td><td>同样要算几何；像素回读代价更高</td></tr>
+    <tr><td>万级对象性能</td><td>会退化，需分层或改为 Canvas 混合</td><td>更强，但本场景（单页几十到几百对象）不需要</td></tr>
+    <tr><td>实现成本</td><td>低：一个渲染器同时服务画板/缩略图/导出</td><td>高：三套绘制路径要各自维护</td></tr></table>
+
+<p>结论：教学图的规模远小于「万级对象」，选 SVG 换来实现简单与导出免费。若未来要做「整册教材批注」（数千对象同屏），再按图层做 Canvas 混合即可，对象模型不用改——这也是把几何放在模型层而不是 DOM 层的好处。</p>
+
+<h2>4. 架构：一条数据流，三个消费端</h2>
+
+<figure>
+  <div class="fig-box">
+    <svg viewBox="0 0 940 300" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft YaHei',sans-serif" font-size="12">
+      <defs>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L10 5 L0 10 Z" fill="#8aa0ad"/>
+        </marker>
+      </defs>
+      <g>
+        <rect x="24" y="96" width="150" height="96" rx="8" fill="#e6f4f1" stroke="#bfe3d6"/>
+        <text x="42" y="122" font-weight="700" fill="#0b5f59">交互层 ui.js</text>
+        <text x="42" y="144" fill="#3d5a57">工具状态机</text>
+        <text x="42" y="164" fill="#3d5a57">命中测试 · 手柄</text>
+        <text x="42" y="184" fill="#3d5a57">快捷键 · 属性面板</text>
+      </g>
+      <g>
+        <rect x="212" y="96" width="170" height="96" rx="8" fill="#fff" stroke="#d9e1e9"/>
+        <text x="230" y="122" font-weight="700" fill="#1c2733">模型层 core.js</text>
+        <text x="230" y="144" fill="#5f6e7d">对象数组（唯一真相）</text>
+        <text x="230" y="164" fill="#5f6e7d">几何 · 吸附 · 矩阵</text>
+        <text x="230" y="184" fill="#5f6e7d">快照式撤销栈</text>
+      </g>
+      <g>
+        <rect x="420" y="24" width="180" height="70" rx="8" fill="#fff" stroke="#d9e1e9"/>
+        <text x="438" y="50" font-weight="700">渲染层 render.js</text>
+        <text x="438" y="72" fill="#5f6e7d">对象 → SVG 字符串</text>
+      </g>
+      <g>
+        <rect x="420" y="110" width="180" height="70" rx="8" fill="#fff" stroke="#d9e1e9"/>
+        <text x="438" y="136" font-weight="700">部件库 parts.js</text>
+        <text x="438" y="158" fill="#5f6e7d">图元 DSL · 87 个符号 · 6 类</text>
+      </g>
+      <g>
+        <rect x="420" y="196" width="180" height="70" rx="8" fill="#fff" stroke="#d9e1e9"/>
+        <text x="438" y="222" font-weight="700">输入输出 io.js</text>
+        <text x="438" y="244" fill="#5f6e7d">PNG / SVG / JSON / 剪贴板</text>
+      </g>
+      <g>
+        <rect x="660" y="40" width="250" height="256" rx="8" fill="#f7fafb" stroke="#d9e1e9"/>
+        <text x="680" y="68" font-weight="700" fill="#33404d">三个消费端，同一套渲染器</text>
+        <text x="680" y="100" fill="#5f6e7d">① 画板（含选中框与预览）</text>
+        <text x="680" y="130" fill="#5f6e7d">② 部件缩略图（库面板）</text>
+        <text x="680" y="160" fill="#5f6e7d">③ 导出（PNG 2×/4×、SVG）</text>
+        <line x1="680" y1="182" x2="890" y2="182" stroke="#e2e8ef"/>
+        <text x="680" y="208" fill="#0b5f59" font-weight="700">收益</text>
+        <text x="680" y="234" fill="#5f6e7d">不存在「屏幕上好看、导出走样」</text>
+        <text x="680" y="260" fill="#5f6e7d">因为二者是同一条代码路径</text>
+        <text x="680" y="284" fill="#5f6e7d">新增图元只需改一处</text>
+      </g>
+      <g stroke="#8aa0ad" stroke-width="1.5" fill="none">
+        <line x1="174" y1="144" x2="208" y2="144" marker-end="url(#a2)"/>
+        <line x1="382" y1="128" x2="416" y2="70" marker-end="url(#a2)"/>
+        <line x1="382" y1="144" x2="416" y2="144" marker-end="url(#a2)"/>
+        <line x1="382" y1="162" x2="416" y2="228" marker-end="url(#a2)"/>
+        <line x1="600" y1="60" x2="656" y2="70" marker-end="url(#a2)"/>
+        <line x1="600" y1="144" x2="656" y2="120" marker-end="url(#a2)"/>
+        <line x1="600" y1="220" x2="656" y2="170" marker-end="url(#a2)"/>
+      </g>
+      <text x="24" y="246" font-size="11.5" fill="#93a0ac">单向依赖：ui → model ← render ← parts；io 只读 model + render。</text>
+    </svg>
+  </div>
+  <figcaption>图 2　模块分层与数据流：对象数组是唯一真相，渲染与导出都只是它的投影</figcaption>
+</figure>
+
+<p>关键设计：<b>没有「视图对象」</b>。画布上的一切都不是 DOM 节点身份的持有者，每次重绘都是「模型 → 字符串 → innerHTML」。这样做的代价是每次交互重建 SVG（本场景可接受），收益是<b>没有状态双写</b>——撤销、加载工程、批量变换都不需要同步 DOM，也解释了为什么一千多行代码能覆盖住 17 个工具。</p>
+
+<h2>5. 对象模型：所有东西都是同一个 <code>obj</code></h2>
+
+<pre><span class="c">// 一个对象的最小形状</span>
+{
+  id: <span class="s">'l7'</span>, type: <span class="s">'line'</span>,          <span class="c">// line | polyline | rect | circle | ellipse | arc</span>
+  x1: 120, y1: 300, x2: 420, y2: 300,   <span class="c">//  | arrow | text | dim | angle | part</span>
+  style: { stroke: <span class="s">'#22303c'</span>, width: 2, dash: <span class="s">'solid'</span>, fill: <span class="s">'none'</span>, opacity: 1 }
+}
+
+<span class="c">// 部件不是图片，而是"带矩阵的图元集合"</span>
+{ id: <span class="s">'p3'</span>, type: <span class="s">'part'</span>, partId: <span class="s">'battery'</span>, x: 260, y: 580, s: 1.5, rot: 0, flip: false }
+
+<span class="c">// 部件定义（parts.js）：局部坐标里的图元数组，可继承实例样式</span>
+{ id: <span class="s">'battery'</span>, name: <span class="s">'电池'</span>, cat: <span class="s">'电学'</span>, w: 64, h: 32,
+  shapes: [ L(0,16,22,16), L(22,4,22,28), L(30,11,30,21), L(30,16,64,16) ] }</pre>
+
+<p>三个由此获得的性质：</p>
+<ul>
+  <li><b>部件与图形地位相同。</b>选中、缩放、镜像、群组、层级、导出都走同一套代码，不需要为「符号」写特例。</li>
+  <li><b>改色即改全部。</b>部件内每个图元默认继承实例 <code>style.stroke</code>，所以一个电池能被整体染红；需要实心的地方（物块、箭头尖）用 <code>fill:'solid'</code> 标记，跟着描边色走。</li>
+  <li><b>缩放不糊。</b>部件靠矩阵变换，导出时仍是矢量。</li>
+</ul>
+
+<h2>6. 部件库：先立规范，再堆数量</h2>
+
+<p>部件最容易做成「一堆写死的坐标」。规范是：<b>局部坐标原点在左上角，尺寸 <code>w×h</code> 由包围盒决定，所有图元落在 0..w / 0..h 内，线宽走实例样式</b>。这样缩略图能自动按比例缩放居中，放置时用「中心对齐光标」，翻转与旋转围绕几何中心。</p>
+
+<table>
+  <thead><tr><th style="width:12%">分类</th><th style="width:56%">已收录部件</th><th style="width:10%">数量</th><th style="width:22%">典型用途</th></tr></thead>
+  <tbody>
+    <tr><td>电学</td><td>电池、电池组、定值电阻、电阻（美标）、滑动变阻器、电位器、灯泡、灯泡（带座）、开关（断/闭）、单刀双掷、二极管、发光二极管、光敏电阻、热敏电阻、电感、变压器、电铃、保险丝、插座、接地、电容器、电解电容、电流表、电压表、灵敏电流计、电动机、发电机、连接点、交叉不相连</td><td>30</td><td>串联/并联电路、伏安法测电阻</td></tr>
+    <tr><td>光学</td><td>凸透镜、凹透镜、三棱镜、平面镜、凸面镜、凹面镜、玻璃砖、半圆玻璃砖、光屏、水槽、光纤、光路箭头、点光源、法线（虚）、焦点 F</td><td>15</td><td>成像规律、折射光路</td></tr>
+    <tr><td>力学</td><td>物块、木块、小球、斜面、斜面上的物块、定滑轮、动滑轮、滑轮组、弹簧、弹簧测力计、小车、绳/细线、杆、地面、力的箭头、支架、传送带、砝码、圆环、刻度尺</td><td>20</td><td>受力分析、机械效率、运动学</td></tr>
+    <tr><td>热学</td><td>烧杯、试管、酒精灯、铁架台、石棉网、活塞气缸</td><td>6</td><td>热学实验装置</td></tr>
+    <tr><td>仪器</td><td>温度计、量筒、托盘天平、秒表、游标卡尺、烧瓶</td><td>6</td><td>测量仪器、实验器材</td></tr>
+    <tr><td>通用</td><td>坐标轴、数轴、点、方框、虚线框、双向箭头、弯箭头、标注框、大括号、向下箭头</td><td>10</td><td>函数图像、结构示意、标注</td></tr>
+    <tr><td colspan="2"><b>合计</b></td><td><b>87</b></td><td>6 类</td></tr>
+  </tbody>
+</table>
+
+<p>补部件的成本极低（一个定义 5～10 行，或用 <code>mk(id, name, cat, w, h, shapes)</code> 一行注册），所以真正的门槛不是「画多少」，而是<b>分类与命名要贴合老师找东西的顺序</b>：按学科主干分类、名字用课本叫法（「滑动变阻器」而不是「可变电阻器」）。90 件左右是「教材常见装置基本都能拼出来」的经验阈值。</p>
+
+<h3>6.2 拖动体系：EE 的手感八成来自这里</h3>
+
+<p>EE 让人觉得「快」，不是因为它画得快，而是因为<b>摆得准</b>：所有东西都能拖，拖的时候自动对齐，线会粘在元件上。本轮把这条链路补成了完整体系，并逐条做了自动化验证。</p>
+
+<table>
+  <thead><tr><th style="width:26%">交互</th><th style="width:52%">行为</th><th style="width:22%">EE 对应</th></tr></thead>
+  <tbody>
+    <tr><td>部件库按住拖入</td><td>拖动中出现缩略图 + 名称的半透明浮块，进入画布变蓝边高亮，松手落件并切回选择工具；只单击不拖则退化为「选中该部件、连续点放」</td><td>符号面板拖放</td></tr>
+    <tr><td>拖动移动</td><td>位移实时生效，光标旁浮标显示 <code>dx , dy</code>；贴网格、贴其它对象的左/中/右、上/中/下时出现洋红参考线</td><td>对象拖动 + 参考线</td></tr>
+    <tr><td>端点手柄拖动</td><td>选中单条线/箭头后两端出现圆手柄，可直接改长度方向；已粘附的端点显示为橙色</td><td>控制点编辑</td></tr>
+    <tr><td>端点粘附</td><td>端点吸附到对象锚点后松手即绑定（存相对宿主包围盒中心的偏移）；此后移动/缩放宿主，线端自动跟随；宿主被删则解绑</td><td>连接点（电路图的灵魂）</td></tr>
+    <tr><td><code>Alt</code>/<code>Ctrl</code> + 拖</td><td>拖动复制：原件留原位，拖走的是副本</td><td>拖出复制</td></tr>
+    <tr><td><code>Shift</code> + 拖</td><td>锁轴向，只沿水平或竖直移动</td><td>轴向约束</td></tr>
+    <tr><td>部件旋转手柄</td><td>单选部件时包围盒上方出现手柄，拖动绕中心旋转，<code>Shift</code> 吸附 15°</td><td>符号旋转</td></tr>
+  </tbody>
+</table>
+
+<p>实现上有个关键取舍：<b>绑定不存绝对坐标，存相对宿主中心的偏移</b>（<code>bind = { x1:{id,dx,dy} }</code>）。若存绝对坐标，宿主缩放后线端就对不上；存偏移则缩放天然成立，且只需在每次重绘前统一重算一遍（<code>applyBindings()</code>），不用给每个对象挂监听器。</p>
+
+<h2>7. 捕捉引擎：优先级比精度更重要</h2>
+
+<p>捕捉的难点不是「算出最近的点」，而是<b>多个候选点重叠时选哪一个</b>。若栅格与端点同时命中，选栅格会让用户的「贴端点」意图落空，画出来的图差一两个像素、看着就是不对。所以本项目给几何锚点一个与捕捉半径成正比的优先级奖励：</p>
+
+<pre>score = 距离 − (几何锚点 ? 捕捉半径 × 0.35 : 0)   <span class="c">// 越小越优先</span>
+<span class="c">// 候选池：栅格 → 端点/中点/圆心/象限/中心 → 交点（仅近邻对象之间两两求交）</span></pre>
+
+<table>
+  <thead><tr><th style="width:18%">候选类型</th><th style="width:42%">来源</th><th style="width:40%">优先级</th></tr></thead>
+  <tbody>
+    <tr><td>端点</td><td>线段两端、折线顶点、矩形四角、部件包围盒角</td><td>最高</td></tr>
+    <tr><td>中点 / 中心</td><td>线段中点、折线各段中点、矩形中心</td><td>高</td></tr>
+    <tr><td>圆心 / 象限点</td><td>圆、椭圆、圆弧</td><td>高</td></tr>
+    <tr><td>交点</td><td>近邻对象的线—线、线—圆、圆—圆</td><td>高（只在 2.2 倍捕捉半径内计算）</td></tr>
+    <tr><td>正交 / 15°</td><td>相对上一点的方向约束（3° 自动磁吸，Shift 强制 15°）</td><td>仅当无点命中时生效</td></tr>
+    <tr><td>栅格</td><td>固定步长取整（默认 20 单位）</td><td>最低</td></tr>
+  </tbody>
+</table>
+
+<p>移动与缩放也复用同一套逻辑：拖动选区时，包围盒四角会尝试对齐到其它对象的锚点，偏差在 7px 内即吸附——这正是「把两个元件摆成一条线」这类高频动作的省力点。</p>
+
+<h2>8. 已实现 / 未实现的边界</h2>
+
+<figure>
+  <div class="fig-box">
+    <svg viewBox="0 0 940 262" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft YaHei',sans-serif" font-size="12">
+      <text x="10" y="20" font-size="12.5" fill="#33404d" font-weight="700">按能力域看落地程度（每一格 = 第 2 节表格中的一条功能，共 27 条）</text>
+      <!-- 图例 -->
+      <g>
+        <rect x="700" y="8" width="10" height="10" fill="#0f766e"/><text x="716" y="18" fill="#5f6e7d">已实现 18</text>
+        <rect x="790" y="8" width="10" height="10" fill="#d9a25a"/><text x="806" y="18" fill="#5f6e7d">部分 5</text>
+        <rect x="866" y="8" width="10" height="10" fill="#cfd7de"/><text x="882" y="18" fill="#5f6e7d">未实现 4</text>
+      </g>
+      <g fill="#5f6e7d">
+        <text x="10" y="56">绘图工具</text>
+        <text x="10" y="94">几何与捕捉</text>
+        <text x="10" y="132">编辑与变换</text>
+        <text x="10" y="170">部件系统</text>
+        <text x="10" y="208">导出与工程</text>
+      </g>
+      <!-- 每格 74.3px，起点 x=124 -->
+      <g>
+        <!-- 绘图工具：6 ok / 1 part / 0 no （共7） -->
+        <rect x="124" y="44" width="446" height="14" fill="#0f766e"/>
+        <rect x="570" y="44" width="74" height="14" fill="#d9a25a"/>
+        <text x="654" y="55" fill="#5f6e7d">6 项</text>
+
+        <!-- 几何与捕捉：2 ok / 1 part / 1 no （共4） -->
+        <rect x="124" y="82" width="149" height="14" fill="#0f766e"/>
+        <rect x="273" y="82" width="74" height="14" fill="#d9a25a"/>
+        <rect x="347" y="82" width="74" height="14" fill="#cfd7de"/>
+        <text x="431" y="93" fill="#5f6e7d">2 / 1 / 1</text>
+
+        <!-- 编辑与变换：3 ok / 2 part / 1 no （共6） -->
+        <rect x="124" y="120" width="223" height="14" fill="#0f766e"/>
+        <rect x="347" y="120" width="149" height="14" fill="#d9a25a"/>
+        <rect x="496" y="120" width="74" height="14" fill="#cfd7de"/>
+        <text x="580" y="131" fill="#5f6e7d">3 / 2 / 1</text>
+
+        <!-- 部件系统：2 ok / 0 / 1 no （共3） -->
+        <rect x="124" y="158" width="149" height="14" fill="#0f766e"/>
+        <rect x="273" y="158" width="74" height="14" fill="#cfd7de"/>
+        <text x="357" y="169" fill="#5f6e7d">2 / 0 / 1</text>
+
+        <!-- 导出与工程：5 ok / 1 part / 1 no（共7） -->
+        <rect x="124" y="196" width="372" height="14" fill="#0f766e"/>
+        <rect x="496" y="196" width="74" height="14" fill="#d9a25a"/>
+        <rect x="570" y="196" width="74" height="14" fill="#cfd7de"/>
+        <text x="654" y="207" fill="#5f6e7d">5 / 1 / 1</text>
+      </g>
+      <line x1="124" y1="224" x2="880" y2="224" stroke="#e2e8ef"/>
+      <text x="124" y="244" font-size="11.5" fill="#93a0ac">计数口径与第 2 节表格逐条对应：18 + 5 + 4 = 27，没有"感觉差不多"的估算。</text>
+    </svg>
+    </svg>
+  </div>
+  <figcaption>图 3　能力覆盖概览（口径：第 2 节表格的功能条目，一条一行）</figcaption>
+</figure>
+
+<h3>8.1 现在的边界（必须说清）</h3>
+<ul>
+  <li><b>修剪只支持直线。</b>折线、圆、矩形被别的对象打断后无法「点一段删一段」。做法是把 <code>doTrim</code> 里的参数化逻辑下沉成通用的「按交点重采样」，二期可扩到所有开放曲线。</li>
+  <li><b>普通图形不能任意角度旋转。</b>部件已可用旋转手柄自由旋转（<code>Shift</code> 吸附 15°），文字仍走 90° 步进；矩形、椭圆、圆弧要转任意角，需要引入「对象自带角度 + 角度感知的包围盒」，改动面较大，放到二期。</li>
+  <li><b>填充是「整对象上色」，不是「点内部填种子区域」。</b>对矩形/圆/多边形够用，对「两条线与圆弧围出的区域」不行——那本质上需要布尔运算，见下一条。</li>
+  <li><b>布尔并/差/交未实现。</b>这是 EE 类工具里「画不规则图形」的关键，需要平面多边形布尔库（如 martinez），属于二期最大的一块。</li>
+  <li><b>部件是「静态符号」，没有参数联动。</b>EE 的控制器/占位符能做到「改一个值，符号跟着变」（如滑动变阻器滑片位置）。这需要在部件定义里加参数通道，是二期设计重点。</li>
+  <li><b>无图层面板与多页。</b>当前 z-order 靠数组顺序，置顶/置底够用，但画复杂装置时会想要「把电路放一层、标注放一层」。</li>
+</ul>
+
+<h3>8.2 二期路线（按投入产出排序）</h3>
+<ol>
+  <li><b>部件参数化</b>（性价比最高）：给部件定义加 <code>params</code>，先做滑动变阻器滑片、可变电阻、透镜焦距指示，让「一套符号覆盖一类题」。</li>
+  <li><b>布尔运算 + 种子填充</b>：引入多边形布尔，打通「不规则区域上色」，顺带解锁修剪的通用版。</li>
+  <li><b>普通图形的任意角度旋转</b>：把部件的旋转能力下沉到对象层——图形加 <code>rot</code>，包围盒走旋转矩形，手柄跟着转。</li>
+  <li><b>图层与多页</b>：对象加 <code>layer</code>，渲染按层分组，导出按页。</li>
+  <li><b>导出增强</b>：PDF（打印友好）、按选区导出、透明背景、批量导出整册。</li>
+</ol>
+
+<h2>9. 风险与边界</h2>
+<table>
+  <thead><tr><th style="width:20%">风险</th><th style="width:44%">表现</th><th style="width:36%">当前处理</th></tr></thead>
+  <tbody>
+    <tr><td>与 EE 的习惯错位</td><td>快捷键、右键菜单与你肌肉记忆不一致，反而变慢</td><td>工具按首字母绑定（V/L/A/R/E/C…），右侧常驻快捷键表；可按你的习惯改</td></tr>
+    <tr><td>本地文件模式限制</td><td><code>file://</code> 下剪贴板图片写入可能被拒</td><td>失败自动回退为下载 PNG，并明确提示</td></tr>
+    <tr><td>中文字体差异</td><td>PNG 里的中文由系统字体渲染，换机可能字形变化</td><td>固定 <code>Microsoft YaHei / PingFang SC</code> 字族回退链</td></tr>
+    <tr><td>复杂图性能</td><td>每次交互重建 SVG，数百对象时可能掉帧</td><td>本场景（教学单图）实测无感；超量时按层拆 Canvas</td></tr>
+    <tr><td>数据丢失</td><td>关闭浏览器前未导出</td><td>localStorage 自动草稿 + 打开时可恢复</td></tr>
+  </tbody>
+</table>
+
+<h2>10. 交付物与验证</h2>
+<p>代码在 <code>D:\Trae CN\myPro\DrawPhy</code>，纯静态、<b>双击 index.html 即可用</b>，无需 npm、无需构建、无需联网。</p>
+<ul>
+  <li><b>自检：</b>17 项逻辑断言全部通过（部件完整性、SVG 合法性、交点数学、包围盒、非等比缩放、吸附优先级、矩阵可逆等），脚本在 <code>_check/test.html</code>；另有 22 项交互断言用合成 PointerEvent 跑真实拖动链路（库拖入、移动、Alt 复制、端点粘附、宿主跟随、旋转），脚本在 <code>_check/interact.html</code>。</li>
+  <li><b>导出验证：</b><code>_check/png.html</code> 实跑 SVG→Image→Canvas→PNG 全链路，产出 28KB 合法 PNG。</li>
+  <li><b>界面验证：</b>以 <code>index.html?sample=1</code> 载入示例场景并在无头 Chrome 截图核对，排版无重叠、部件与标注正常。</li>
+</ul>
+
+<p class="kv">下一步建议：先用它画 3～5 张你最近要用的真实课件图，把「卡住你的那一步」记下来——那一步通常就是二期该做的第一件事，比继续堆功能更有效。</p>
+
+<footer class="end">
+  DrawPhy 调研报告 · 2026-11-04 · 本文所有数字均来自本项目代码与自检结果，未使用估算值。
+</footer>
+</div>
+</body>
+</html>

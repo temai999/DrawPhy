@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DrawPhy · 科学绘图板</title>
+<link rel="stylesheet" href="assets/editor.css">
+</head>
+<body>
+<div id="app">
+  <!-- EE 双层顶栏：第一层标签页 -->
+  <header id="topbar">
+    <div class="brand"><b>DrawPhy</b></div>
+    <nav id="tabs">
+      <button data-tab="file">文件</button>
+      <button data-tab="draw" class="on">绘图</button>
+      <button data-tab="part">部件</button>
+      <button data-tab="arrange">排列</button>
+      <button data-tab="view">视图</button>
+    </nav>
+    <div class="group right">
+      <span id="zoomLabel">100%</span>
+    </div>
+  </header>
+
+  <!-- 第二层：横向分组工具带 -->
+  <div id="ribbon">
+    <!-- 文件：竖排分类按钮，点击就地展开（与绘图/部件同机制） -->
+    <div class="rgroup" data-r="file" hidden>
+      <div class="rcell partcats" id="fileCatBar">
+        <button data-cat="file.action" style="background:#2563eb"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M12 12v6M9 15h6"/></svg><span>文件操作</span></button>
+        <button data-cat="file.export" style="background:#10b981"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="M8 10l4 4 4-4"/><path d="M5 19h14"/></svg><span>导出</span></button>
+        <button data-cat="file.sample" style="background:#f59e0b"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor" stroke="none"/></svg><span>示例</span></button>
+        <button data-cat="file.help" style="background:#8b5cf6"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.7 9.2a2.4 2.4 0 1 1 3.3 2.2c-.7.3-1 .8-1 1.6"/><circle cx="12" cy="16.8" r=".5" fill="currentColor"/></svg><span>帮助</span></button>
+      </div>
+    </div>
+
+    <!-- 绘图：竖排分类按钮，点击就地展开（与部件同格式） -->
+    <div class="rgroup" data-r="draw" hidden>
+      <div class="rcell partcats" id="drawCatBar">
+        <button data-cat="shape"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="3.5" width="11" height="11" rx="1.5"/><circle cx="16" cy="16" r="4.2"/></svg><span>基本图形</span></button>
+        <button data-cat="text"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M12 6v13M8.5 19h7"/></svg><span>文字与标注</span></button>
+        <button data-cat="edit"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1.2-4.2L15 6l3 3L8.2 18.8z"/><path d="M13.5 7.5l3 3"/></svg><span>编辑工具</span></button>
+        <button data-cat="style"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18c1.6 0 2.2-1.1 2.2-2.2 0-1.4 1.1-2 2.4-2H18a4 4 0 0 0 4-4c0-5-4.5-7.8-10-7.8z"/><circle cx="7.5" cy="11" r="1.1"/><circle cx="12" cy="8" r="1.1"/><circle cx="16.5" cy="11" r="1.1"/></svg><span>样式</span></button>
+      </div>
+    </div>
+
+    <!-- 部件：竖排分类按钮，点击就地展开 -->
+    <div class="rgroup" data-r="part" hidden>
+      <div class="rcell partcats" id="partCatBar">
+        <button data-cat="电学"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg><span>电学</span></button>
+        <button data-cat="光学"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="12" rx="3" ry="9"/><path d="M3 12h3M18 12h3M12 3v3M12 18v3"/></svg><span>光学</span></button>
+        <button data-cat="力学"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 18h16M8 18V6l8 4"/></svg><span>力学</span></button>
+        <button data-cat="热学"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 22a6 6 0 006-6c0-4-6-9-6-12 0 3-6 5-6 9a6 6 0 006 6z"/></svg><span>热学</span></button>
+        <button data-cat="仪器"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="7"/><path d="M12 13l4-4M9 3h6"/></svg><span>仪器</span></button>
+        <button data-cat="常用图形"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="7" height="7" rx="1"/><circle cx="16.5" cy="16.5" r="3.5"/></svg><span>常用图形</span></button>
+        <button data-cat="连接线"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="5" cy="12" r="2.5"/><circle cx="19" cy="5" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M7.5 12h9M17 6.5l-2 4M17 17.5l-2-4"/></svg><span>连接线</span></button>
+        <button data-cat="尺寸"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 8l13 13M5 6l2 2M8 5l2 2M11 8l2 2M14 11l2 2"/><path d="M14 21l7-7"/></svg><span>尺寸</span></button>
+        <button data-cat="环类"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg><span>环类</span></button>
+        <button data-cat="化学键"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="7" r="3"/><circle cx="18" cy="17" r="3"/><path d="M9 11l6-3M9 13l6 3"/></svg><span>化学键</span></button>
+        <button data-cat="通用"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg><span>通用</span></button>
+      </div>
+    </div>
+
+    <!-- 排列：竖排分类按钮，点击就地展开 -->
+    <div class="rgroup" data-r="arrange" hidden>
+      <div class="rcell partcats" id="arrangeCatBar">
+        <button data-cat="align.group" style="background:#f43f5e"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="7" height="7" rx="1"/><path d="M15 9V5H5v10h4"/><path d="M9 15v4h10V9h-4"/></svg><span>组合</span></button>
+        <button data-cat="align.layer" style="background:#0ea5e9"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16"/><path d="M8.5 8L12 4.5 15.5 8"/><path d="M8.5 16L12 19.5 15.5 16"/></svg><span>层级</span></button>
+        <button data-cat="align.transform" style="background:#14b8a6"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 3v4h-4"/></svg><span>变换</span></button>
+        <button data-cat="align.align" style="background:#6366f1"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h13"/><path d="M7 3v18"/></svg><span>对齐</span></button>
+      </div>
+    </div>
+
+    <!-- 视图：竖排分类按钮，点击就地展开 -->
+    <div class="rgroup" data-r="view" hidden>
+      <div class="rcell partcats" id="viewCatBar">
+        <button data-cat="view.display" style="background:#22c55e"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.6"/></svg><span>显示</span></button>
+        <button data-cat="view.zoom" style="background:#f97316"><svg class="cat-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/><path d="M10.5 8v5M8 10.5h5"/></svg><span>缩放</span></button>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <section class="stage">
+      <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+      <input id="inlineText" class="inline-text" hidden autocomplete="off" spellcheck="false">
+      <div id="toast"></div>
+    </section>
+
+    <aside class="right">
+      <div class="panel-title">属性</div>
+      <div id="props" class="props"></div>
+    </aside>
+  </main>
+
+  <div id="partPop" hidden></div>
+
+  <footer><span id="hint">就绪</span></footer>
+</div>
+<input type="file" id="fileInput" accept=".json" hidden>
+
+<script src="src/core/config.js"></script>
+<script src="src/core/module-wrap.js"></script>
+<script src="src/core/registry.js"></script>
+<script src="src/core/eventbus.js"></script>
+<script src="src/core.js"></script>
+<script src="src/modules/primitives/rect.js"></script>
+<script src="src/modules/primitives/arrow.js"></script>
+<script src="src/modules/primitives/line.js"></script>
+<script src="src/modules/primitives/circle.js"></script>
+<script src="src/modules/primitives/ellipse.js"></script>
+<script src="src/modules/primitives/polyline.js"></script>
+<script src="src/modules/primitives/arc.js"></script>
+<script src="src/modules/primitives/path.js"></script>
+<script src="src/modules/primitives/text.js"></script>
+<script src="src/modules/primitives/textbox.js"></script>
+<script src="src/modules/primitives/callout.js"></script>
+<script src="src/modules/primitives/dim.js"></script>
+<script src="src/modules/primitives/angle.js"></script>
+<script src="src/func.js"></script>
+<script src="src/parts.js"></script>
+<script src="src/render.js"></script>
+<script src="src/ui.js"></script>
+<script src="src/io.js"></script>
+<script>
+  window.addEventListener('DOMContentLoaded', function () {
+    DP.ui.init();
+    var q = new URLSearchParams(location.search);
+    if (q.get('sample') === '1') DP.io.sample();
+  });
+</script>
+</body>
+</html>
