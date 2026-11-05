@@ -496,13 +496,31 @@
     return { x: bb.x + bb.w / 2, y: bb.y + bb.h / 2 };
   };
 
-  M.bindEndpoint = function (o, key, host) {
+  /* 部件命名端子的世界坐标（阶段 5.4）；无此端子返回 null */
+  M.terminalPoint = function (o, tid) {
+    if (!o || o.type !== 'part') return null;
+    const def = DP.parts.byId[o.partId];
+    if (!def || !def.terminals) return null;
+    const t = def.terminals.find((x) => x.id === tid);
+    if (!t) return null;
+    return G.apply(M.partMatrix(o), { x: t.x, y: t.y });
+  };
+
+  M.bindEndpoint = function (o, key, host, terminal) {
     if (!host || !o || host.id === o.id) return false;
     if (o.type !== 'line' && o.type !== 'arrow') return false;
-    const rp = M.refPoint(host);
     const ex = key === 'x1' ? o.x1 : o.x2;
     const ey = key === 'x1' ? o.y1 : o.y2;
     o.bind = o.bind || {};
+    /* 端子粘附：偏移相对端子点记录；宿主缩放/旋转/翻转时按 partMatrix 精确重算 */
+    if (terminal && host.type === 'part') {
+      const tp = M.terminalPoint(host, terminal);
+      if (tp) {
+        o.bind[key] = { id: host.id, terminal, dx: ex - tp.x, dy: ey - tp.y };
+        return true;
+      }
+    }
+    const rp = M.refPoint(host);
     o.bind[key] = { id: host.id, dx: ex - rp.x, dy: ey - rp.y };
     return true;
   };
@@ -526,7 +544,13 @@
         const host = objs.find((x) => x.id === b.id);
         if (!host) { delete o.bind[key]; continue; }
         alive = true;
-        const rp = M.refPoint(host);
+        /* 端子绑定优先按端子精确点解析；端子缺失（如部件定义更新）回退包围盒中心 */
+        let rp = null;
+        if (b.terminal) {
+          rp = M.terminalPoint(host, b.terminal);
+          if (!rp) b.terminal = undefined;
+        }
+        if (!rp) rp = M.refPoint(host);
         if (key === 'x1') { o.x1 = rp.x + b.dx; o.y1 = rp.y + b.dy; }
         else { o.x2 = rp.x + b.dx; o.y2 = rp.y + b.dy; }
       }
@@ -660,15 +684,17 @@
   /* 收集所有可吸附点 */
   S.collectPoints = function (objects, exclude) {
     const out = [];
-    const push = (x, y, type, oid) => {
+    const push = (x, y, type, oid, tid) => {
       if (!isFinite(x) || !isFinite(y)) return;
-      out.push({ x, y, type, oid });
+      const e = { x, y, type, oid };
+      if (tid) e.tid = tid;
+      out.push(e);
     };
     for (const o of objects) {
       if (exclude && exclude.has(o.id)) continue;
       const mod = moduleOf(o);
       if (mod && typeof mod.anchors === 'function') {
-        for (const a of mod.anchors(o) || []) push(a.x, a.y, anchorLabel(a), o.id);
+        for (const a of mod.anchors(o) || []) push(a.x, a.y, anchorLabel(a), o.id, a.tid);
         continue;
       }
       switch (o.type) {
@@ -809,7 +835,7 @@
     }
     if (st.snap.anchors) {
       for (const c of S.collectPoints(st.objects, ctx.exclude)) {
-        if (Math.hypot(c.x - p.x, c.y - p.y) <= tol) cands.push({ x: c.x, y: c.y, label: c.type, weak: true, oid: c.oid });
+        if (Math.hypot(c.x - p.x, c.y - p.y) <= tol) cands.push({ x: c.x, y: c.y, label: c.type, weak: true, oid: c.oid, terminal: c.tid || null });
       }
       for (const c of S.intersections(st.objects, p, tol * 1.4)) {
         if (Math.hypot(c.x - p.x, c.y - p.y) <= tol) cands.push({ x: c.x, y: c.y, label: '交点', weak: true });
@@ -823,7 +849,7 @@
       const score = d - (c.weak ? tol * 0.35 : 0);
       if (score < bestD) { bestD = score; best = c; }
     }
-    let res = best ? { x: best.x, y: best.y, label: best.label, oid: best.oid || null } : { x: p.x, y: p.y, label: '', oid: null };
+    let res = best ? { x: best.x, y: best.y, label: best.label, oid: best.oid || null, terminal: best.terminal || null } : { x: p.x, y: p.y, label: '', oid: null, terminal: null };
 
     // 角度约束（正交 / Shift 15°）
     if (ctx.from) {

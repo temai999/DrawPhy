@@ -343,11 +343,16 @@
     if (!def) return;
     const sp = DP.snap.resolve(world, { radius: 11 / st.view.k });
     DP.history.push();
-    const o = {
-      id: M.uid('pt'), type: 'part', partId: pid,
-      x: sp.x - def.w / 2, y: sp.y - def.h / 2, s: 1, rot: 0, flip: false,
-      style: M.clone(st.style),
-    };
+    /* 构造走模块 defaults 工厂（阶段 5）：模块缺失时回退内联构造，字段保持一致 */
+    const mod = M.moduleOf({ type: 'part' });
+    const o = mod && typeof mod.defaults === 'function'
+      ? mod.defaults({ partId: pid, x: sp.x - def.w / 2, y: sp.y - def.h / 2 })
+      : {
+        id: M.uid('pt'), type: 'part', partId: pid,
+        x: sp.x - def.w / 2, y: sp.y - def.h / 2, s: 1, rot: 0, flip: false,
+      };
+    o.id = M.uid('pt');
+    o.style = M.clone(st.style);
     st.objects.push(o);
     DP.sel.set([o.id]);
     if (!keepTool) U.setTool('select');
@@ -762,7 +767,7 @@
       radius: opts.radius || 11 / st.view.k,
     });
     U.snapInfo = res.label ? { x: res.x, y: res.y, label: res.label } : null;
-    return { x: res.x, y: res.y, oid: res.oid || null };
+    return { x: res.x, y: res.y, oid: res.oid || null, terminal: res.terminal || null };
   }
 
   /* ------------------------------- 命中测试 ------------------------------- */
@@ -1261,11 +1266,11 @@
           if (shape) {
             if (D.startOid) {
               const host = st.objects.find((o) => o.id === D.startOid && o !== shape);
-              if (host && M.bindEndpoint(shape, 'x1', host)) U.toast('起点已粘附到对象，移动它时线会跟随');
+              if (host && M.bindEndpoint(shape, 'x1', host, D.startTerminal)) U.toast('起点已粘附到对象，移动它时线会跟随');
             }
             if (end.oid) {
               const host = st.objects.find((o) => o.id === end.oid && o !== shape);
-              if (host && M.bindEndpoint(shape, 'x2', host)) U.toast('终点已粘附到对象，移动它时线会跟随');
+              if (host && M.bindEndpoint(shape, 'x2', host, end.terminal)) U.toast('终点已粘附到对象，移动它时线会跟随');
             }
           }
         }
@@ -1276,7 +1281,7 @@
       // 第一下：定起点
       D = {
         mode: 'line2', tool, start: p, cur: p, waiting: false,
-        startOid: p.oid || null, curOid: null, style: M.clone(st.style),
+        startOid: p.oid || null, startTerminal: p.terminal || null, curOid: null, style: M.clone(st.style),
       };
       cap(e);
       U.render();
@@ -1286,7 +1291,7 @@
     // 拖动式：rect / ellipse / circle / freehand / roundrect / func
     D = {
       mode: 'draw', tool, start: p, cur: p,
-      startOid: p.oid || null,
+      startOid: p.oid || null, startTerminal: p.terminal || null,
       style: M.clone(st.style),
       pts: tool === 'freehand' ? [[p.x, p.y]] : null,
     };
@@ -1443,6 +1448,7 @@
       const sp = snap(p, { exclude: new Set([D.obj.id]) });
       setNode(D.obj, D.key, sp);
       D.snapOid = sp.oid;
+      D.snapTerminal = sp.terminal || null;
       D.moved = true;
       D.badge = { x: sp.x + 14 / st.view.k, y: sp.y - 10 / st.view.k, text: `${G.round(sp.x)} , ${G.round(sp.y)}` };
       U.render();
@@ -1492,11 +1498,11 @@
         if (shape) {
           if (D.startOid) {
             const host = st.objects.find((o) => o.id === D.startOid && o !== shape);
-            if (host && M.bindEndpoint(shape, 'x1', host)) U.toast('起点已粘附到对象，移动它时线会跟随');
+            if (host && M.bindEndpoint(shape, 'x1', host, D.startTerminal)) U.toast('起点已粘附到对象，移动它时线会跟随');
           }
           if (D.curOid) {
             const host = st.objects.find((o) => o.id === D.curOid && o !== shape);
-            if (host && M.bindEndpoint(shape, 'x2', host)) U.toast('终点已粘附到对象，移动它时线会跟随');
+            if (host && M.bindEndpoint(shape, 'x2', host, end.terminal)) U.toast('终点已粘附到对象，移动它时线会跟随');
           }
         }
         D = null;
@@ -1522,11 +1528,11 @@
         if (shape && (shape.type === 'line' || shape.type === 'arrow')) {
           if (D.startOid) {
             const host = st.objects.find((o) => o.id === D.startOid && o !== shape);
-            if (host && M.bindEndpoint(shape, 'x1', host)) U.toast('起点已粘附到对象，移动它时线会跟随');
+            if (host && M.bindEndpoint(shape, 'x1', host, D.startTerminal)) U.toast('起点已粘附到对象，移动它时线会跟随');
           }
           if (D.curOid) {
             const host = st.objects.find((o) => o.id === D.curOid && o !== shape);
-            if (host && M.bindEndpoint(shape, 'x2', host)) U.toast('终点已粘附到对象，移动它时线会跟随');
+            if (host && M.bindEndpoint(shape, 'x2', host, end.terminal)) U.toast('终点已粘附到对象，移动它时线会跟随');
           }
         }
       }
@@ -1552,7 +1558,7 @@
       if (D.moved) { DP.history.push(); autosave(); }
       if (D.snapOid && (D.obj.type === 'line' || D.obj.type === 'arrow')) {
         const host = st.objects.find((x) => x.id === D.snapOid);
-        if (host && M.bindEndpoint(D.obj, D.key, host)) {
+        if (host && M.bindEndpoint(D.obj, D.key, host, D.snapTerminal)) {
           U.toast('已粘附：移动该对象时，端点会跟着走');
         }
       }

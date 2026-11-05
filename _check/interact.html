@@ -49,6 +49,8 @@
 <script src="../src/modules/primitives/callout.js"></script>
 <script src="../src/modules/primitives/dim.js"></script>
 <script src="../src/modules/primitives/angle.js"></script>
+<script src="../src/modules/host/part.js"></script>
+<script src="../src/modules/host/point.js"></script>
 <script src="../src/parts.js"></script>
 <script src="../src/render.js"></script>
 <script src="../src/ui.js"></script>
@@ -56,6 +58,8 @@
 <script>
 (function () {
   const out = [];
+  const errors = [];
+  window.addEventListener('error', (e) => { errors.push(String(e.message)); });
   let pass = 0, fail = 0;
   function t(name, ok, extra) {
     if (ok) { pass++; out.push('PASS  ' + name); }
@@ -124,7 +128,7 @@
     t('拖拽过程中出现半透明预览', !!ghost);
     window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 3, clientX: 300, clientY: 200 }));
     const last = DP.state.objects[DP.state.objects.length - 1];
-    t('松手后落下一个部件', DP.state.objects.length === before + 1 && last.type === 'part' && last.partId === pid, last && last.partId);
+    t('松手后落下一个部件', DP.state.objects.length === before + 1 && last.type === 'part' && last.partId === pid, 'len=' + DP.state.objects.length + '/' + before + ' last=' + (last && last.type + ':' + last.partId));
     t('拖放后自动切到选择工具', DP.state.tool === 'select', DP.state.tool);
   }
 
@@ -322,6 +326,27 @@
   DP.history.undo();
   t('撤销可用', DP.state.objects.length >= beforeUndo - 1);
 
+  /* ---------- 10. 阶段5：命名端子粘附（正极） ---------- */
+  DP.state.snap.anchors = true;
+  DP.state.snap.grid = false;
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  const host10 = mkPart('battery', 400, 300);   // 部件左上角 (368,284)，正极 = (368,300)
+  DP.ui.render();
+  const wire10 = { id: 'LW1', type: 'line', x1: 200, y1: 300, x2: 240, y2: 300, style: Object.assign({}, DP.state.style) };
+  DP.state.objects.push(wire10);
+  click(220, 300);                              // 选中线
+  drag(240, 300, 370, 300);                     // 拖右端点靠近正极端子
+  t('端点吸附到命名端子', Math.abs(wire10.x2 - 368) <= 1, 'x2=' + Math.round(wire10.x2));
+  t('绑定记录 terminal=正极', !!(wire10.bind && wire10.bind.x2 && wire10.bind.x2.terminal === '+'),
+    wire10.bind ? JSON.stringify(wire10.bind.x2) : 'none');
+  click(400, 288);                              // 选中宿主（避开线）
+  drag(400, 288, 430, 288);                     // 右移 30
+  t('端子绑定随宿主精确跟随', Math.abs(wire10.x2 - 398) < 1e-6 && Math.abs(wire10.y2 - 300) < 1e-6,
+    wire10.x2 + ',' + wire10.y2);
+  DP.state.snap.anchors = false;
+
+  if (errors.length) out.push('PAGE_ERRORS: ' + errors.join(' | '));
   out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
   document.getElementById('r').textContent = out.join('\n');
   document.title = 'RESULT ' + pass + '/' + (pass + fail);

@@ -368,6 +368,48 @@
     A(40, 44, 13, -30, 0),
   ]);
 
+  /* ================= 命名端子（阶段 5.4） =================
+   * 局部坐标下的可接线端点。导线端点吸附到端子后 bind 记录 terminal 字段，
+   * 宿主移动/缩放/旋转/翻转时按 partMatrix 精确重算（见 core.js applyBindings）。
+   * 未列出的部件 terminals 为空 → 行为与旧版一致（包围盒中心偏移绑定）。 */
+  const TERMINALS = {
+    battery: [{ id: '+', x: 0, y: 16, label: '正极' }, { id: '-', x: 64, y: 16, label: '负极' }],
+    batteryGroup: [{ id: '+', x: 0, y: 16, label: '正极' }, { id: '-', x: 92, y: 16, label: '负极' }],
+    resistor: [{ id: 'a', x: 0, y: 14, label: '接线端' }, { id: 'b', x: 64, y: 14, label: '接线端' }],
+    resistorUS: [{ id: 'a', x: 0, y: 14, label: '接线端' }, { id: 'b', x: 64, y: 14, label: '接线端' }],
+    rheostat: [{ id: 'a', x: 0, y: 26, label: '接线端' }, { id: 'b', x: 88, y: 26, label: '接线端' }, { id: 'w', x: 74, y: 2, label: '滑片' }],
+    potentiometer: [{ id: 'a', x: 0, y: 28, label: '接线端' }, { id: 'b', x: 88, y: 28, label: '接线端' }, { id: 'w', x: 38, y: 10, label: '滑动端' }],
+    lamp: [{ id: 'a', x: 0, y: 18, label: '接线端' }, { id: 'b', x: 60, y: 18, label: '接线端' }],
+    lampHouse: [{ id: 'a', x: 0, y: 30, label: '接线端' }, { id: 'b', x: 30, y: 46, label: '接线端' }],
+    switchOpen: [{ id: 'a', x: 0, y: 24, label: '接线端' }, { id: 'b', x: 64, y: 24, label: '接线端' }],
+    switchClosed: [{ id: 'a', x: 0, y: 24, label: '接线端' }, { id: 'b', x: 64, y: 24, label: '接线端' }],
+    switchSPDT: [{ id: 'c', x: 0, y: 22, label: '公共端' }, { id: 'n1', x: 76, y: 8, label: '上触点' }, { id: 'n2', x: 76, y: 38, label: '下触点' }],
+    diode: [{ id: 'a', x: 0, y: 15, label: '阳极' }, { id: 'k', x: 56, y: 15, label: '阴极' }],
+    led: [{ id: 'a', x: 0, y: 22, label: '阳极' }, { id: 'k', x: 56, y: 22, label: '阴极' }],
+    photoresistor: [{ id: 'a', x: 0, y: 22, label: '接线端' }, { id: 'b', x: 64, y: 22, label: '接线端' }],
+    thermistor: [{ id: 'a', x: 0, y: 20, label: '接线端' }, { id: 'b', x: 64, y: 20, label: '接线端' }],
+    inductor: [{ id: 'a', x: 0, y: 16, label: '接线端' }, { id: 'b', x: 64, y: 16, label: '接线端' }],
+    transformer: [{ id: 'p1', x: 0, y: 28, label: '原边端' }, { id: 'p2', x: 44, y: 28, label: '原边端' }, { id: 's1', x: 56, y: 28, label: '副边端' }, { id: 's2', x: 96, y: 28, label: '副边端' }],
+    bell: [{ id: 'a', x: 0, y: 30, label: '接线端' }, { id: 'b', x: 0, y: 46, label: '接线端' }],
+    fuse: [{ id: 'a', x: 0, y: 15, label: '接线端' }, { id: 'b', x: 60, y: 15, label: '接线端' }],
+    socket: [{ id: 'l', x: 18, y: 17, label: '插孔' }, { id: 'n', x: 30, y: 17, label: '插孔' }, { id: 'e', x: 24, y: 32, label: '地线孔' }],
+    ground: [{ id: 'g', x: 23, y: 0, label: '接地端' }],
+    capacitor: [{ id: 'a', x: 0, y: 15, label: '接线端' }, { id: 'b', x: 56, y: 15, label: '接线端' }],
+    capacitorPolar: [{ id: '-', x: 0, y: 16, label: '负极' }, { id: '+', x: 56, y: 16, label: '正极' }],
+    ammeter: [{ id: 'a', x: 0, y: 22, label: '接线端' }, { id: 'b', x: 48, y: 22, label: '接线端' }],
+    voltmeter: [{ id: 'a', x: 0, y: 22, label: '接线端' }, { id: 'b', x: 48, y: 22, label: '接线端' }],
+    galvanometer: [{ id: 'a', x: 0, y: 22, label: '接线端' }, { id: 'b', x: 48, y: 22, label: '接线端' }],
+    motor: [{ id: 'a', x: 0, y: 24, label: '接线端' }, { id: 'b', x: 48, y: 24, label: '接线端' }],
+    generator: [{ id: 'a', x: 0, y: 24, label: '接线端' }, { id: 'b', x: 48, y: 24, label: '接线端' }],
+    node: [{ id: 't', x: 8, y: 8, label: '连接点' }],
+    crossOver: [{ id: 'w', x: 0, y: 20, label: '接线端' }, { id: 'e', x: 40, y: 20, label: '接线端' }, { id: 'n', x: 20, y: 0, label: '接线端' }, { id: 's', x: 20, y: 40, label: '接线端' }],
+  };
+  list.forEach((d) => { if (TERMINALS[d.id]) d.terminals = TERMINALS[d.id]; });
+
+  /* 注册进 registry parts 表（阶段 5.4 启用）：新代码经 registry.getPart 取定义，
+     DP.parts.byId 保持兼容（同一对象引用，两表永远一致） */
+  list.forEach((d) => { if (DP.registry && DP.registry.registerPart) DP.registry.registerPart(d); });
+
   DP.parts = {
     list,
     byId: Object.fromEntries(list.map((p) => [p.id, p])),

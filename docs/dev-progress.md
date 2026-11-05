@@ -210,3 +210,29 @@
 ### 决策记录
 - 历史改命令式采用「afterChange 前后快照差分自动生成 undo 数据」方案（不逐命令手写），并需先建 `_check/history.html` 专项页（随机操作序列 undo/redo 深比较）再替换实现。
 - 对象字段命名冻结（存量 JSON 兼容优先）；吸附引擎冻结；双轨在阶段 5 末收敛为单轨。
+
+---
+
+## 阶段 5（上）：part/point 宿主模块 + 命名端子（2026-11-05）
+
+### 改动文件清单
+- 新增 `src/modules/host/part.js`（type `part`）：bbox = partMatrix×局部四角；命中 = 世界包围盒±2（旧语义）；anchors = 四角+中心+**命名端子**（局部端子点经 partMatrix 映射，携带 `tid`）；scale = 包围盒中心定位 + s×k；**mirror 保持旧语义（只翻 flip 标志，不平移）**；render = matrix 组逐图元委托。
+- 新增 `src/modules/host/point.js`（type `point`）：bbox/hitTest/平移/缩放/镜像/渲染全部对齐旧 switch。
+- `src/render.js`：**R.primitive 接入 registry 优先分派**（阶段 5.1），部件内部图元渲染不再绕过模块，顶层与内部渲染同源。
+- `src/core.js`：collectPoints 透传锚点 `tid`；S.resolve 返回 `terminal`；新增 `M.terminalPoint(o, tid)`；`bindEndpoint` 第四参 terminal（偏移相对端子点记录）；`applyBindings` 端子绑定优先按 partMatrix 精确重算，端子缺失自动回退包围盒中心（旧格式完全兼容）。
+- `src/ui.js`：snap 包装返回 terminal；三处线条绑定点 + 节点拖动透传 terminal；`placePartAt` 改走 `mod.defaults()` 工厂（**修出真实 bug：工厂返回值缺 type 字段**，已在模块 defaults 内补齐）。
+- `src/parts.js`：新增 `TERMINALS` 映射，**31 个电学部件**标出命名端子（电池正负极、二极管/LED 阴阳极、变压器原副边、开关公共端/触点、接地端等）；`registry.registerPart` 启用，114 部件全部入 registry parts 表（`DP.parts.byId` 保持同引用兼容）。
+- `index.html` / `_check/test.html` / `_check/interact.html` 同步加载 host 两个模块；interact.html 增加 window.onerror 采集（输出 PAGE_ERRORS）。
+- 建立 git 版本控制（阶段 0）：初始提交 + 换行符配置，backup/ 与 _check/*.png 已 gitignore。
+
+### 验证结果
+- `node --check` 24 个 JS 全部通过。
+- 逻辑自检 **98/98**（新增 15 条：part bbox/命中/端子锚点/变换/镜像语义、terminalPoint、端子绑定写入与精确跟随、旧格式兼容、collectPoints 透传、registry parts 表、point 契约）。
+- 交互自检 **50/50**（新增 3 条：端点吸附命名端子、绑定记录 terminal='+'、移动宿主端子精确跟随）。
+- PNG 导出链路产出 32265B 合法图片；`index.html?sample=1` 无控制台异常，截图 `_check/stage5-sample.png` 界面正常。
+
+### 遗留问题
+- 阶段 5 收尾未做：旧 switch 中 `part/point` 分支摘除 + 全类型双轨收敛为单轨（需先 diff 模块与旧实现一致性）。
+- 电学以外类别（光学/力学/热学等 83 个部件）暂未标端子，terminals 为空时行为同旧版。
+- 属性面板/悬停尚未展示端子名（数据与绑定已就绪，属 UI 增强）。
+- 阶段 4 遗留的 fillAll 消费端仍缺失（填充工具对部件设置了 fillAll 但渲染未消费，为迁移前既有问题）。

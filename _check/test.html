@@ -21,6 +21,8 @@
 <script src="../src/modules/primitives/callout.js"></script>
 <script src="../src/modules/primitives/dim.js"></script>
 <script src="../src/modules/primitives/angle.js"></script>
+<script src="../src/modules/host/part.js"></script>
+<script src="../src/modules/host/point.js"></script>
 <script src="../src/parts.js"></script>
 <script src="../src/render.js"></script>
 <script>
@@ -351,6 +353,72 @@
     const probePts = DP.snap.collectPoints([{ id: 'p2', type: 'stage2probe' }]);
     ok('吸附 registry 优先', probePts.length === 1 && probePts[0].type === '中心', JSON.stringify(probePts));
     ok('渲染 registry 优先', DP.render.object(probe).indexOf('<circle') === 0, DP.render.object(probe));
+
+    // 17 阶段 5：part/point 宿主模块 + 命名端子绑定
+    const p5part = DP.registry.get('part');
+    const p5point = DP.registry.get('point');
+    ok('part/point 模块已注册', !!p5part && !!p5point);
+
+    const p5bat = { id: 'b1', type: 'part', partId: 'battery', x: 100, y: 100, s: 1, rot: 0, flip: false };
+    const p5bb = p5part.bbox(p5bat);
+    ok('part 模块 bbox（battery 64×32）', p5bb.x === 100 && p5bb.y === 100 && p5bb.w === 64 && p5bb.h === 32,
+      JSON.stringify(p5bb));
+    ok('part 模块命中（bbox±2）', p5part.hitTest(p5bat, { x: 120, y: 116 }, 1) === true &&
+      p5part.hitTest(p5bat, { x: 170, y: 116 }, 1) === false);
+
+    const p5anch = p5part.anchors(p5bat);
+    const p5plus = p5anch.find((a) => a.tid === '+');
+    ok('part 端子锚点（正极=局部(0,16)）', !!p5plus && Math.abs(p5plus.x - 100) < 1e-6 && Math.abs(p5plus.y - 116) < 1e-6,
+      JSON.stringify(p5plus));
+
+    p5part.translate(p5bat, 10, 20);
+    p5part.scale(p5bat, 2, 2, 0, 0);
+    ok('part 变换（中心定位 + s×k）', p5bat.x === 252 && p5bat.y === 256 && p5bat.s === 2,
+      JSON.stringify({ x: p5bat.x, y: p5bat.y, s: p5bat.s }));
+
+    const p5bat2 = { id: 'b2', type: 'part', partId: 'battery', x: 100, y: 100, s: 1, rot: 0, flip: false };
+    p5part.mirror(p5bat2, 'h');
+    ok('part 镜像保持旧语义（只翻 flip）', p5bat2.flip === true && p5bat2.x === 100 && p5bat2.y === 100);
+
+    const p5bat3 = { id: 'b3', type: 'part', partId: 'battery', x: 100, y: 100, s: 1, rot: 0, flip: false };
+    const p5tp = DP.model.terminalPoint(p5bat3, '+');
+    ok('terminalPoint 端子世界坐标', Math.abs(p5tp.x - 100) < 1e-6 && Math.abs(p5tp.y - 116) < 1e-6,
+      JSON.stringify(p5tp));
+
+    const p5ln = { id: 'l1', type: 'line', x1: 0, y1: 0, x2: 100, y2: 116 };
+    const p5ln2 = { id: 'l2', type: 'line', x1: 0, y1: 0, x2: 132, y2: 116 };
+    DP.state.objects = [p5bat3, p5ln, p5ln2];
+    DP.model.bindEndpoint(p5ln, 'x2', p5bat3, '+');
+    ok('端子绑定写入 terminal 字段', !!(p5ln.bind && p5ln.bind.x2 && p5ln.bind.x2.terminal === '+'),
+      JSON.stringify(p5ln.bind));
+    p5bat3.x = 200;
+    DP.model.applyBindings();
+    ok('端子绑定随宿主精确跟随', Math.abs(p5ln.x2 - 200) < 1e-6 && Math.abs(p5ln.y2 - 116) < 1e-6,
+      p5ln.x2 + ',' + p5ln.y2);
+
+    DP.model.bindEndpoint(p5ln2, 'x2', p5bat3);
+    ok('旧格式绑定兼容（无 terminal 字段）', !!(p5ln2.bind && p5ln2.bind.x2 && p5ln2.bind.x2.terminal === undefined),
+      JSON.stringify(p5ln2.bind));
+    const p5cx = p5ln2.x2, p5cy = p5ln2.y2;
+    p5bat3.x = 210;
+    DP.model.applyBindings();
+    ok('旧格式绑定随包围盒中心跟随', Math.abs(p5ln2.x2 - (p5cx + 10)) < 1e-6 && Math.abs(p5ln2.y2 - p5cy) < 1e-6,
+      p5ln2.x2 + ',' + p5ln2.y2);
+    DP.state.objects = [];
+
+    const p5cp = DP.snap.collectPoints([{ id: 'b3', type: 'part', partId: 'battery', x: 300, y: 300, s: 1, rot: 0, flip: false }], null);
+    ok('collectPoints 透传端子 tid', p5cp.some((c) => c.tid === '+') && p5cp.some((c) => c.tid === '-'),
+      JSON.stringify(p5cp.filter((c) => c.tid)));
+
+    ok('registry parts 表启用（114 部件带端子数据）',
+      DP.registry.getPart('battery').terminals.length === 2 && DP.registry._tables().partCount >= 114,
+      JSON.stringify(DP.registry._tables()));
+
+    const p5pt = { id: 'p1', type: 'point', x: 50, y: 60, r: 3.5 };
+    ok('point 模块 bbox/命中', p5point.bbox(p5pt).w === 7 && p5point.hitTest(p5pt, { x: 52, y: 60 }, 1) === true &&
+      p5point.hitTest(p5pt, { x: 60, y: 60 }, 1) === false);
+    p5point.translate(p5pt, 5, -5);
+    ok('point 模块平移', p5pt.x === 55 && p5pt.y === 55);
   } catch (e) {
     ok('运行异常', false, e && e.message);
   }
