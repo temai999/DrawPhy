@@ -113,6 +113,12 @@
   }
 
   R.primitive = function (o, rs) {
+    /* 双轨分派：部件内部图元优先走 registry 模块，未注册类型回退旧 switch。
+       （阶段 5.1：消除「顶层对象模块化、部件内部仍旧 switch」的漂移面） */
+    const mod = o && DP.registry && DP.registry.get ? DP.registry.get(o.type) : null;
+    if (mod && typeof mod.render === 'function') {
+      return R.drawable(mod.render(o, { style: rs }));
+    }
     const st = strokeAttrs(rs, o.dash);
     switch (o.type) {
       case 'line':
