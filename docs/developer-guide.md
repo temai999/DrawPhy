@@ -141,8 +141,9 @@ if (mod && mod.translate) { mod.translate(o, dx, dy); } else { /* 旧 switch 分
 
 ### 4.4 线型 / 线宽 / 端点粘附能力位（阶段 7 起强制）
 
-- **线型**：唯一来源 `src/core/style.js`。模块渲染一律 `DP.style.dashArray(dash)`，UI 按钮一律用 `dashBtnHtml()` 生成「实际线样」按钮（名称只进 title，不出现在按钮上），ribbon 样式面板与属性面板共用。`dashdot`（点划线）是光学主光轴的教材画法，别改名。
-- **线宽**：预设 `DP.style.WIDTHS`（0.75/1/1.5/2/3/4），按钮用 `widthBtnHtml()` 生成「真实粗细线样 + 数字」；属性面板另有「自定义」数值框，非预设值由 `DP.style.normWidth()` 兜底（脏值回落 2，上限 24）。
+- **线型**：唯一来源 `src/core/style.js`。模块渲染一律 `DP.style.dashArray(dash)`；UI 是**线样下拉**（`styleDropHtml()` 生成、`bindStyleDrops()` 绑定、`setDropValue()` 同步收起态），每个选项都是真实 dasharray 画的线样，不是文字选项。`dashdot`（点划线）是光学主光轴的教材画法，别改名。
+- **线宽**：预设 `DP.style.WIDTHS`（0.75/1/1.5/2/3/4），同样是线样下拉（线样按真实粗细画 + 数字）；属性面板下拉旁保留窄的「自定义」数值框，非预设值由 `DP.style.normWidth()` 兜底（脏值回落 2，上限 24），并在 `setDropValue()` 里就地补选项。
+- **线样下拉的实现要点**（改 UI 前必读）：原生 `<select>` 的 option 放不了 SVG，所以是自绘下拉。菜单用 `position:fixed` + `placeDropMenu()` 计算坐标——因为 `#ribbon` 是 `overflow-y:hidden`，普通 absolute 菜单会被裁掉；点空白/滚动/Esc 收起的全局监听在 `bindTopbar()` 只挂一次；选项点击用**事件委托**绑在 `.sdrop` 容器上，动态补进去的选项也能用。
 - **端点粘附**：模块在 `capabilities` 里声明 `bind: true`（line/arrow/ray 已声明），核心与 UI 一律用 `M.isBindable(o)` 判断。**禁止再写 `type === 'line' || type === 'arrow'` 这类硬编码**——光线就是漏改案例。
 
 ## 5. 标准任务手册

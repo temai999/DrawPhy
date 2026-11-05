@@ -74,22 +74,113 @@
     if (sel.length) U.toast('已应用样式到 ' + sel.length + ' 个对象');
   }
 
-  /* --------------------- 线型 / 线宽按钮：用实际线样，不用文字符号 ---------------------
-     线型：按真实 dasharray 画一段线（所见即所得），名称只放 title 提示；
-     线宽：一段该粗细的线样 + 数字文字（只看线样分不清 1 与 1.5，数字必须留）。
-     ribbon 样式面板与右侧属性面板共用同一套生成器，避免两处样式漂移。 */
-  function dashBtnHtml(d, active, color) {
-    const da = d.pattern ? ` stroke-dasharray="${d.pattern}"` : '';
-    return `<button type="button" data-d="${d.id}" class="pick-dash${active ? ' on' : ''}" title="${d.name}（${d.hint}）">`
-      + `<svg viewBox="0 0 40 12" width="34" height="11" fill="none" stroke="${color || 'currentColor'}" `
-      + `stroke-width="2" stroke-linecap="butt"><line x1="1" y1="6" x2="39" y2="6"${da}/></svg></button>`;
+  /* ---------------------- 线型 / 线宽：线样下拉（不是平铺按钮） ----------------------
+     原生 <select> 的 <option> 只能放文字、放不了图形，所以这里用轻量自绘下拉：
+     收起态 = 当前取值的真实线样 + 名称/数值；展开态 = 一条纵向选项列表，每项也是真实线样。
+     ribbon 样式面板与右侧属性面板共用同一套 HTML 生成器与事件绑定，避免两处漂移。
+     菜单用 position:fixed 逃出 ribbon 的 overflow 裁剪（ribbon 高度固定、横向可滚动）。 */
+  const CHEV = '<svg class="sdrop-chev" viewBox="0 0 10 6" width="8" height="5" fill="none" '
+    + 'stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M1 1.2 5 5 9 1.2"/></svg>';
+
+  /* 一段真实线样：pattern 为 dasharray，sw 为实际线宽（已按 viewBox 上限裁剪） */
+  function lineSampleSvg(pattern, sw, color, wPx, hPx) {
+    const da = pattern ? ` stroke-dasharray="${pattern}"` : '';
+    return `<svg viewBox="0 0 40 12" width="${wPx}" height="${hPx}" fill="none" `
+      + `stroke="${color || 'currentColor'}" stroke-width="${sw}" stroke-linecap="butt">`
+      + `<line x1="1" y1="6" x2="39" y2="6"${da}/></svg>`;
   }
-  function widthBtnHtml(w, active, color) {
+  function dashItemHtml(d, color) {
+    return `<button type="button" class="sdrop-item" data-v="${d.id}">`
+      + `<span class="sdrop-swatch">${lineSampleSvg(d.pattern, 2, color, 34, 11)}</span>`
+      + `<span class="sdrop-txt">${d.name}</span></button>`;
+  }
+  function widthItemHtml(w, color) {
     /* 线样粗细按真实值画（上限 9，避免超出 12 高的 viewBox） */
     const sw = Math.min(9, Math.max(0.75, +w));
-    return `<button type="button" data-w="${w}" class="pick-width${active ? ' on' : ''}" title="线宽 ${w}">`
-      + `<svg viewBox="0 0 22 12" width="20" height="11" fill="none" stroke="${color || 'currentColor'}" `
-      + `stroke-width="${sw}" stroke-linecap="round"><line x1="2" y1="6" x2="20" y2="6"/></svg><b>${w}</b></button>`;
+    return `<button type="button" class="sdrop-item" data-v="${w}">`
+      + `<span class="sdrop-swatch">${lineSampleSvg('', sw, color, 26, 11)}</span>`
+      + `<span class="sdrop-txt">${w}</span></button>`;
+  }
+  /* 线宽选项：预设 6 档 + 文档里的非预设值（打开旧文件时值不被悄悄改掉） */
+  function widthOpts(cur) {
+    const list = DP.style.WIDTHS.slice();
+    if (list.indexOf(cur) < 0) list.push(cur);
+    return list.sort((a, b) => a - b);
+  }
+  function styleDropHtml(id, kind, itemsHtml, cur) {
+    const menu = itemsHtml.join('');
+    const curEl = `<span class="sdrop-swatch"></span><span class="sdrop-txt"></span>`;
+    return `<span class="sdrop" id="${id}" data-kind="${kind}">`
+      + `<button type="button" class="sdrop-btn" title="点击选择">${curEl}${CHEV}</button>`
+      + `<div class="sdrop-menu">${menu}</div></span>`;
+  }
+  /* 把下拉收起态同步到某个取值（找不到就补一项，非预设线宽用得上） */
+  function setDropValue(drop, v, sampleFn) {
+    if (!drop) return;
+    const key = String(v);
+    const items = Array.prototype.slice.call(drop.querySelectorAll('.sdrop-item'));
+    let hit = items.filter((b) => b.dataset.v === key)[0];
+    if (!hit && sampleFn) {
+      const menu = drop.querySelector('.sdrop-menu');
+      if (!menu) return;
+      menu.insertAdjacentHTML('beforeend', sampleFn(v));
+      hit = menu.lastElementChild;
+    }
+    if (!hit) return;
+    items.forEach((b) => b.classList.toggle('on', b === hit));
+    hit.classList.add('on');
+    syncDropBtn(drop, hit);
+  }
+  function syncDropBtn(drop, item) {
+    const sw = drop.querySelector('.sdrop-btn .sdrop-swatch');
+    const tx = drop.querySelector('.sdrop-btn .sdrop-txt');
+    const is = item.querySelector('.sdrop-swatch');
+    const it = item.querySelector('.sdrop-txt');
+    if (sw && is) sw.innerHTML = is.innerHTML;
+    if (tx && it) tx.textContent = it.textContent;
+  }
+  /* 菜单 fixed 定位：贴按钮下方，空间不够就翻到上方，左右夹在视口内 */
+  function placeDropMenu(drop) {
+    const btn = drop.querySelector('.sdrop-btn');
+    const menu = drop.querySelector('.sdrop-menu');
+    if (!btn || !menu) return;
+    const r = btn.getBoundingClientRect();
+    const w = Math.max(r.width, 140);
+    const h = menu.offsetHeight || 0;
+    let top = r.bottom + 3;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 3);
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+    menu.style.width = w + 'px';
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+  }
+  function closeDrops() {
+    document.querySelectorAll('.sdrop.open').forEach((d) => d.classList.remove('open'));
+  }
+  /* 绑定一组下拉：事件委托在容器上，动态补进去的选项也能用 */
+  function bindStyleDrops(root, onPick) {
+    root.querySelectorAll('.sdrop').forEach((drop) => {
+      drop.addEventListener('click', (e) => {
+        const t = e.target;
+        const item = t.closest && t.closest('.sdrop-item');
+        if (item && drop.contains(item)) {
+          e.preventDefault();
+          e.stopPropagation();
+          drop.querySelectorAll('.sdrop-item').forEach((b) => b.classList.toggle('on', b === item));
+          syncDropBtn(drop, item);
+          drop.classList.remove('open');
+          if (onPick) onPick(drop.dataset.kind, item.dataset.v, drop);
+          return;
+        }
+        const btn = t.closest && t.closest('.sdrop-btn');
+        if (btn && drop.contains(btn)) {
+          e.stopPropagation();
+          const wasOpen = drop.classList.contains('open');
+          closeDrops();
+          if (!wasOpen) { drop.classList.add('open'); placeDropMenu(drop); }
+        }
+      });
+    });
   }
 
   /* ------------------------------ 数据驱动面板 ------------------------------ */
@@ -180,8 +271,11 @@
       inner = `<div class="part-grid3">${list.map(toolBtn).join('')}</div>`;
     } else if (key === 'style') {
       /* 线型/线宽一律从 DP.style 取（唯一数据源）：新增线型只改 core/style.js */
-      const dashBtns = DP.style.DASHES.map((d) => dashBtnHtml(d, d.id === st.style.dash)).join('');
-      const widthBtns = DP.style.WIDTHS.map((w) => widthBtnHtml(w, +st.style.width === w)).join('');
+      const curW = DP.style.normWidth(st.style.width);
+      const dashDrop = styleDropHtml('swDash', 'dash',
+        DP.style.DASHES.map((d) => dashItemHtml(d)), st.style.dash);
+      const widthDrop = styleDropHtml('swWidth', 'width',
+        widthOpts(curW).map((w) => widthItemHtml(w)), curW);
       inner = `<div class="style-grid3">
         <div class="style-row">
           <span class="style-label">线色</span>
@@ -202,11 +296,11 @@
         </div>
         <div class="style-row">
           <span class="style-label">线型</span>
-          <span class="toolbtns" id="swDash">${dashBtns}</span>
+          ${dashDrop}
         </div>
         <div class="style-row">
           <span class="style-label">线宽</span>
-          <span class="toolbtns" id="swWidth">${widthBtns}</span>
+          ${widthDrop}
         </div>
         <div class="style-row">
           <span class="style-label">填充</span>
@@ -259,23 +353,20 @@
     if (bgCk) bgCk.checked = st.page.grid !== false;
     if (snCk) snCk.checked = st.snap.anchors !== false;
     bindPartButtons(el);
-    /* 样式按钮的选中态随当前对象/全局样式同步（线型 6 项、线宽 6 档） */
+    /* 样式控件的取值随当前对象/全局样式同步（线型、线宽为线样下拉） */
     const markStyleBtns = () => {
       const cur = (DP.sel.list()[0] || {}).style || st.style;
-      el.querySelectorAll('#swDash button').forEach((b) => b.classList.toggle('on', b.dataset.d === cur.dash));
-      el.querySelectorAll('#swWidth button').forEach((b) => b.classList.toggle('on', +b.dataset.w === +cur.width));
+      setDropValue(el.querySelector('#swDash'), cur.dash,
+        (v) => dashItemHtml({ id: v, name: v, pattern: DP.style.dashArray(v) }, cur.stroke));
+      setDropValue(el.querySelector('#swWidth'), DP.style.normWidth(cur.width),
+        (v) => widthItemHtml(v, cur.stroke));
       el.querySelectorAll('#swFill button').forEach((b) =>
         b.classList.toggle('on', (b.dataset.f || 'none') === (cur.fill || 'none')));
     };
     const applyAndMark = (patch) => { applyStyle(patch); markStyleBtns(); };
     el.querySelectorAll('#swStroke i').forEach((s) =>
       s.addEventListener('click', () => applyAndMark({ stroke: s.dataset.c })));
-    el.querySelectorAll('#swDash button').forEach((b) =>
-      b.addEventListener('click', () => applyAndMark({ dash: b.dataset.d })));
-    el.querySelectorAll('#swWidth button').forEach((b) =>
-      b.addEventListener('click', () => applyAndMark({ width: +b.dataset.w })));
-    el.querySelectorAll('#swFill button').forEach((b) =>
-      b.addEventListener('click', () => applyAndMark({ fill: b.dataset.f })));
+    bindStyleDrops(el, (kind, v) => applyAndMark(kind === 'dash' ? { dash: v } : { width: +v }));
     markStyleBtns();
     const customInput = el.querySelector('#customColor');
     let saved = [];
@@ -546,10 +637,14 @@
     /* 顶部样式快捷条（静态部分若存在则绑定；#swStroke 等实际在内联面板中由 toggleRibInline 绑定） */
     document.querySelectorAll('#swStroke i').forEach((el) =>
       el.addEventListener('click', () => applyStyle({ stroke: el.dataset.c })));
-    document.querySelectorAll('#swDash button').forEach((el) =>
-      el.addEventListener('click', () => applyStyle({ dash: el.dataset.d })));
     document.querySelectorAll('#swFill button').forEach((el) =>
       el.addEventListener('click', () => applyStyle({ fill: el.dataset.f })));
+    /* 线样下拉：点空白处 / 滚动 / 按 Esc 收起（全局一次，避免面板反复打开时重复挂载） */
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest || !e.target.closest('.sdrop')) closeDrops();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrops(); });
+    window.addEventListener('scroll', closeDrops, true);
     document.getElementById('fileInput').addEventListener('change', (e) => {
       const f = e.target.files[0];
       if (!f) return;
@@ -1994,16 +2089,16 @@
     /* 线宽/线型用「实际线样」按钮（不是文字下拉）：线型按真实 dasharray 画线，
        线宽按真实粗细画线并附数字；线样用当前线色，所见即所得。 */
     const curW = +s.width || DP.config.defaults.strokeWidth;
-    const wList = DP.style.WIDTHS.slice();
-    if (wList.indexOf(curW) < 0) wList.push(curW);
-    wList.sort((a, b) => a - b);
-    const widthPicks = wList.map((w) => widthBtnHtml(w, w === curW, s.stroke)).join('');
-    const dashPicks = DP.style.DASHES.map((d) => dashBtnHtml(d, s.dash === d.id, s.stroke)).join('');
+    const wList = widthOpts(curW);
+    /* 线型/线宽=线样下拉（收起态一条，展开态列表）；线样用当前线色，所见即所得 */
+    const dashDrop = styleDropHtml('pDash', 'dash',
+      DP.style.DASHES.map((d) => dashItemHtml(d, s.stroke)), s.dash);
+    const widthDrop = styleDropHtml('pWidth', 'width',
+      wList.map((w) => widthItemHtml(w, s.stroke)), curW);
     const common = `
       <div class="row"><label>线色</label><input type="color" id="pStroke" value="${s.stroke}"></div>
-      <div class="row"><label>线型</label><div class="picks" id="pDash">${dashPicks}</div></div>
-      <div class="row"><label>线宽</label><div class="picks" id="pWidth">${widthPicks}</div></div>
-      <div class="row"><label>自定义</label><input type="number" id="pWidthNum" min="0.25" max="24" step="0.25" value="${curW}"></div>
+      <div class="row"><label>线型</label>${dashDrop}</div>
+      <div class="row"><label>线宽</label>${widthDrop}<input type="number" id="pWidthNum" min="0.25" max="24" step="0.25" value="${curW}" title="自定义线宽"></div>
       <div class="row"><label>填充</label><input type="color" id="pFill" value="${s.fill && s.fill !== 'none' ? s.fill : '#ffffff'}">
         <button class="mini" id="pFillNone">无</button></div>
       <div class="row"><label>字号</label><input type="number" id="pFontSize" min="8" max="120" value="${s.fontSize || 18}"></div>
@@ -2094,21 +2189,24 @@
       if (el) el.addEventListener(ev, fn);
     };
     on('pStroke', 'input', (e) => apply((o) => { (o.style || st.style).stroke = e.target.value; if (!sel.length) st.style.stroke = e.target.value; }));
-    /* 线型/线宽：实际线样按钮点选（不是下拉），点完同步选中态 */
-    const syncWidthPicks = (v) => {
-      box.querySelectorAll('#pWidth .pick-width').forEach((b) => b.classList.toggle('on', +b.dataset.w === v));
-    };
-    box.querySelectorAll('#pDash .pick-dash').forEach((b) => b.addEventListener('click', () => {
-      apply((o) => { (o.style || st.style).dash = b.dataset.d; });
-      box.querySelectorAll('#pDash .pick-dash').forEach((x) => x.classList.toggle('on', x === b));
-    }));
-    box.querySelectorAll('#pWidth .pick-width').forEach((b) => b.addEventListener('click', () => {
-      const v = +b.dataset.w;
-      const num = box.querySelector('#pWidthNum');
-      if (num) num.value = v;
-      apply((o) => { (o.style || st.style).width = v; });
-      syncWidthPicks(v);
-    }));
+    /* 线型/线宽：线样下拉。收起态在面板重建后补填；选中项直接改对象样式 */
+    const s0 = (sel.length ? sel[0].style : st.style) || st.style;
+    const pDash = box.querySelector('#pDash');
+    const pWidth = box.querySelector('#pWidth');
+    setDropValue(pDash, s0.dash,
+      (v) => dashItemHtml({ id: v, name: v, pattern: DP.style.dashArray(v) }, s0.stroke));
+    setDropValue(pWidth, DP.style.normWidth(s0.width), (v) => widthItemHtml(v, s0.stroke));
+    bindStyleDrops(box, (kind, v) => {
+      if (kind === 'dash') {
+        apply((o) => { (o.style || st.style).dash = v; });
+      } else {
+        const w = DP.style.normWidth(v);
+        const num = box.querySelector('#pWidthNum');
+        if (num) num.value = w;
+        apply((o) => { (o.style || st.style).width = w; });
+      }
+    });
+    const syncWidthPicks = (v) => setDropValue(pWidth, v, (x) => widthItemHtml(x, s0.stroke));
     on('pWidthNum', 'change', (e) => {
       const v = DP.style.normWidth(e.target.value);
       e.target.value = v;
