@@ -116,7 +116,7 @@
   /* 统一应用样式：全局默认 + 选中对象 */
   function applyStyle(patch) {
     const sel = DP.sel.list();
-    if (sel.length) DP.history.push();
+    if (sel.length) DP.history.push('style');
     Object.assign(st.style, patch);
     sel.forEach((o) => { o.style = o.style || {}; Object.assign(o.style, patch); });
     autosave(); U.render(); renderProps();
@@ -778,9 +778,17 @@
     return false;
   }
 
+  /* 两段式命中（阶段 6.3）：先用包围盒（容差外扩 4px）粗筛，再交给模块精细命中。
+     800 对象场景下把绝大多数对象挡在 O(1) 的包围盒判断里。 */
   function hitTest(p, tol) {
+    const pad = tol + 4;
     for (let i = st.objects.length - 1; i >= 0; i--) {
-      if (hitObject(st.objects[i], p, tol)) return st.objects[i];
+      const o = st.objects[i];
+      const bb = M.localBBox(o);
+      if (bb.w > 0 || bb.h > 0) {
+        if (p.x < bb.x - pad || p.x > bb.x + bb.w + pad || p.y < bb.y - pad || p.y > bb.y + bb.h + pad) continue;
+      }
+      if (hitObject(o, p, tol)) return o;
     }
     return null;
   }
@@ -964,7 +972,7 @@
           const def = DP.parts.byId[hit.partId];
           if (def) {
             const hasClosed = def.shapes.some((s) => s.type === 'rect' || s.type === 'circle' || s.type === 'polyline' || s.type === 'path');
-            if (!hasClosed) { U.toast('该部件没有可填充的封闭轮廓'); DP.history.stack.pop(); return; }
+            if (!hasClosed) { U.toast('该部件没有可填充的封闭轮廓'); DP.history.pop(); return; }
           }
           hit.fillAll = !hit.fillAll;
         } else {
@@ -1957,7 +1965,7 @@
           if (!st.selection.size) return;
           e.preventDefault();
           const d = e.shiftKey ? 10 : 1;
-          DP.history.push();
+          DP.history.push('nudge');
           const dx = e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0;
           const dy = e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0;
           DP.sel.list().forEach((o) => M.translateObj(o, dx, dy));
@@ -2189,7 +2197,7 @@
     const styleTargets = sel.length ? sel : [null];
     const apply = (fn) => {
       if (sel.length) {
-        DP.history.push();
+        DP.history.push('style');
         sel.forEach((o) => { o.style = o.style || {}; fn(o); });
         autosave();
       } else fn({ style: st.style });

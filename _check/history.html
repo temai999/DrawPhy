@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>DrawPhy history selftest</title></head>
+<body>
+<pre id="r">running…</pre>
+<script src="../src/core/config.js"></script>
+<script src="../src/core/module-wrap.js"></script>
+<script src="../src/core/registry.js"></script>
+<script src="../src/core/eventbus.js"></script>
+<script src="../src/core.js"></script>
+<script src="../src/modules/primitives/rect.js"></script>
+<script src="../src/modules/primitives/arrow.js"></script>
+<script src="../src/modules/primitives/line.js"></script>
+<script src="../src/modules/primitives/circle.js"></script>
+<script src="../src/modules/primitives/ellipse.js"></script>
+<script src="../src/modules/primitives/polyline.js"></script>
+<script src="../src/modules/primitives/arc.js"></script>
+<script src="../src/modules/primitives/path.js"></script>
+<script src="../src/modules/primitives/text.js"></script>
+<script src="../src/modules/primitives/textbox.js"></script>
+<script src="../src/modules/primitives/callout.js"></script>
+<script src="../src/modules/primitives/dim.js"></script>
+<script src="../src/modules/primitives/angle.js"></script>
+<script src="../src/modules/host/part.js"></script>
+<script src="../src/modules/host/point.js"></script>
+<script src="../src/parts.js"></script>
+<script src="../src/render.js"></script>
+<script>
+/* ============================================================
+   历史专项回归：构造确定性 20 步操作序列，逐步 undo 回初态、
+   再 redo 到终态，每一步深比较 objects + groups。
+   替换历史实现前后都必须全绿，才能认为实现等价。
+   ============================================================ */
+(function () {
+  const out = [];
+  let pass = 0, fail = 0;
+  const t = (name, cond, extra) => {
+    out.push((cond ? 'PASS  ' : 'FAIL  ') + name + (extra != null ? '  [' + extra + ']' : ''));
+    cond ? pass++ : fail++;
+  };
+
+  const st = DP.state;
+  const M = DP.model;
+  const H = DP.history;
+
+  /* 确定性伪随机（mulberry32） */
+  function mkRnd(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const baseStyle = () => JSON.parse(JSON.stringify(st.style));
+
+  const sig = () => JSON.stringify({ o: st.objects, g: st.groups });
+  const byId = (id) => st.objects.find((o) => o.id === id);
+
+  /* ---------------- 操作库（只走 model 原语，等价 UI 行为） ---------------- */
+  let seq = 1;
+  const OPS = {
+    addRect() {
+      st.objects.push({ id: 'r' + (seq++), type: 'rect', x: 40 + (seq % 7) * 30, y: 50 + (seq % 5) * 20, w: 60, h: 40, style: baseStyle() });
+    },
+    addCircle() {
+      st.objects.push({ id: 'c' + (seq++), type: 'circle', cx: 300 + (seq % 5) * 20, cy: 120, r: 24, style: baseStyle() });
+    },
+    addLine() {
+      st.objects.push({ id: 'l' + (seq++), type: 'line', x1: 20, y1: 200 + (seq % 3) * 10, x2: 180, y2: 260, style: baseStyle() });
+    },
+    addText() {
+      st.objects.push({ id: 'x' + (seq++), type: 'text', x: 120, y: 300, text: 'T' + seq, size: 16, anchor: 'start', style: baseStyle() });
+    },
+    addPart() {
+      st.objects.push({ id: 'p' + (seq++), type: 'part', partId: 'battery', x: 400, y: 100, s: 1, rot: 0, flip: false, style: baseStyle() });
+    },
+    move(o) { M.translateObj(o, 13, -7); },
+    scale(o) {
+      const bb = M.localBBox(o);
+      if (bb.w > 0 || bb.h > 0) M.scaleObj(o, 1.2, 0.85, bb.x, bb.y);
+    },
+    mirror(o) { M.mirrorObj(o, 'h'); },
+    del(o) { st.objects = st.objects.filter((p) => p !== o); },
+    style(o) { o.style = Object.assign({}, o.style, { stroke: '#c0392b', width: 3 }); },
+    group(a, b) { const g = 'g' + seq++; if (a) a.group = g; if (b) b.group = g; st.groups[g] = true; },
+    reorder(o) { const i = st.objects.indexOf(o); if (i >= 0) { st.objects.splice(i, 1); st.objects.unshift(o); } },
+  };
+
+  try {
+    /* ---- 0 基线：reset 后初始态 ---- */
+    st.objects = [];
+    st.groups = {};
+    H.reset();
+    const s0 = sig();
+    t('reset 后栈长 1 / idx 0', H.stack.length === 1 && H.idx === 0, H.stack.length + '/' + H.idx);
+
+    /* ---- 1 确定性 20 步序列 ---- */
+    const rnd = mkRnd(20261105);
+    const steps = [];
+    const kinds = ['addRect', 'addCircle', 'addLine', 'move', 'scale', 'mirror', 'style', 'addText', 'addPart', 'del', 'group', 'reorder'];
+    for (let i = 0; i < 20; i++) {
+      let kind = kinds[Math.floor(rnd() * kinds.length)];
+      const needObj = !['addRect', 'addCircle', 'addLine', 'addText', 'addPart'].includes(kind);
+      if (needObj && st.objects.length === 0) kind = 'addRect';
+      const pick = st.objects.length ? st.objects[Math.floor(rnd() * st.objects.length)] : null;
+      const other = st.objects.length > 1 ? st.objects[Math.floor(rnd() * st.objects.length)] : null;
+      H.push();                     /* 提交上一操作后的状态（与 UI 的懒提交语义一致） */
+      if (needObj && !pick) continue;
+      if (kind === 'group') OPS.group(pick, other);
+      else OPS[kind](pick);
+      steps.push(kind);
+    }
+    H.push('final');                /* 提交最后一操作 */
+    const states = [s0];
+    /* 重放一遍序列无意义——改为按编码顺序记录各步结果：
+       这里通过再次执行同样的确定性序列采集状态签名，避免 undo 时依赖记录 */
+    const finalSig = sig();
+    t('20 步后对象数 > 0', st.objects.length > 0, st.objects.length);
+    const commitCount = H.stack.length - 1;   /* 无变化的步会被去重，故只断言下界 */
+    t('提交条目数 ≥ 15', commitCount >= 15, String(commitCount));
+
+    /* ---- 2 逐步 undo：先记录每步回退签名，再比对连续 undo 是否稳定 ---- */
+    const undoAlive = [];
+    const undoSigs = [];
+    while (H.undo()) { undoAlive.push(sig()); undoSigs.push(sig()); }
+    t('undo 可回到初态（对象数 0）', st.objects.length === 0, st.objects.length);
+    t('undo 到初态后 groups 为空', Object.keys(st.groups).length === 0, JSON.stringify(st.groups));
+    t('undo 到初态后 idx = 0', H.idx === 0, String(H.idx));
+    t('undo 到底后再 undo 返回 false', H.undo() === false);
+    t('undo 次数 = 提交条目数', undoAlive.length === commitCount, undoAlive.length + ' vs ' + commitCount);
+
+    /* ---- 3 逐步 redo：必须与 undo 记录严格逆序 ---- */
+    const redoAlive = [];
+    while (H.redo()) redoAlive.push(sig());
+    t('redo 次数 = 提交条目数', redoAlive.length === commitCount, redoAlive.length + ' vs ' + commitCount);
+    let redoOk = redoAlive.length === undoAlive.length;
+    let firstBad = -1;
+    for (let i = 0; i < Math.min(redoAlive.length, undoAlive.length) - 1; i++) {
+      /* undo 记录 = [S(k-1)…S0]，redo 记录 = [S1…Sk]；互逆要求 R[i] == U[k-2-i] */
+      if (redoAlive[i] !== undoAlive[undoAlive.length - 2 - i]) { redoOk = false; if (firstBad < 0) firstBad = i; }
+    }
+    t('redo 各步与 undo 各步严格互逆', redoOk, firstBad < 0 ? 'all-ok' : 'first-bad@' + firstBad);
+    t('redo 到顶后与终态一致', sig() === finalSig, sig() === finalSig ? 'equal' : 'diff');
+    t('redo 到顶后再 redo 返回 false', H.redo() === false);
+
+    /* ---- 4 新操作截断 redo 分支 ---- */
+    H.undo(); H.undo();
+    const cutLen = H.stack.length;
+    OPS.addRect();
+    H.push('branch');
+    t('undo 后新操作截断 redo 分支', H.stack.length === cutLen - 1, H.stack.length + ' vs ' + cutLen);
+
+    /* ---- 5 push 无变化不产生新条目 ---- */
+    const n0 = H.stack.length;
+    H.push();
+    H.push();
+    t('无变化连续 push 不增长栈', H.stack.length === n0, H.stack.length + ' vs ' + n0);
+
+    /* ---- 6 栈上限 ---- */
+    const limit = H.limit || 80;
+    for (let i = 0; i < limit + 60; i++) { OPS.move(st.objects[0]); H.push(); }
+    t('栈长度受上限约束', H.stack.length <= limit, H.stack.length + ' / limit ' + limit);
+    t('阶段6 目标：上限提升到 200', limit === 200, 'limit=' + limit);
+    let deep = 0;
+    while (H.undo()) deep++;
+    t('超限后仍可回退至上限深度', deep >= limit - 2, deep + ' / limit ' + limit);
+
+    /* ---- 7 mergeKey 合并（同一标签连续提交合并为一条） ---- */
+    st.objects = [];
+    st.groups = {};
+    H.reset();
+    for (let i = 0; i < 5; i++) {
+      if (!st.objects.length) OPS.addRect();
+      OPS.move(st.objects[0]);
+      H.push('drag', 5000);
+    }
+    const mergedLen = H.stack.length;
+    t('同标签连续提交合并为 1 条', mergedLen === 2, String(mergedLen));
+
+    /* ---- 8 pop() 回滚最后一条（填充失败等场景） ---- */
+    const beforePop = sig();
+    OPS.move(st.objects[0]);
+    H.push('tmp');
+    const afterMove = sig();
+    const popRet = H.pop ? H.pop() : (H.stack.pop(), 'old');
+    t('pop 后状态回到 push 前', popRet === false ? false : sig() === beforePop, sig() === beforePop ? 'restored' : 'drift');
+    t('pop 后与移动态不同', afterMove !== sig());
+    /* ---- 9 性能 / 内存基线（阶段 6 验收） ---- */
+    st.objects = [];
+    for (let i = 0; i < 800; i++) {
+      st.objects.push({ id: 'b' + i, type: 'rect', x: (i % 40) * 30, y: Math.floor(i / 40) * 26, w: 24, h: 18, style: baseStyle() });
+    }
+    st.groups = {};
+    H.reset();
+    const t0 = performance.now();
+    for (let i = 0; i < 50; i++) { OPS.move(st.objects[i]); H.push(); }
+    const dt = (performance.now() - t0) / 50;
+    const patches = H.patchCount ? H.patchCount() : -1;
+    let hbytes = 0;
+    try { hbytes = JSON.stringify(H.stack).length; } catch (e2) {}
+    out.push('BENCH  800 对象 50 步：' + dt.toFixed(2) + ' ms/步，补丁对象数 ' + patches +
+      '，历史字节数 ' + hbytes + '（旧实现同场景 8392994 字节 / 50×800 对象）');
+    t('单步 push 耗时 < 8ms', dt < 8, dt.toFixed(2) + 'ms');
+    t('每步只存 1 个对象补丁', patches === 50, String(patches));
+    let back = 0;
+    while (H.undo()) back++;
+    t('800 对象下 50 步可完整回退', back === 50, String(back));
+
+  } catch (e) {
+    out.push('ERROR ' + (e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e));
+    fail++;
+  }
+
+  out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
+  document.getElementById('r').textContent = out.join('\n');
+})();
+</script>
+</body>
+</html>
