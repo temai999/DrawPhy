@@ -574,6 +574,64 @@
       ok('callout defaults 补齐 box/size/style', co.w === 0 && co.h === 0 && co.size === 13 && !!co.style,
         JSON.stringify({ w: co.w, size: co.size }));
     })();
+
+    /* ---- 阶段 8-b：修剪几何（圆/弧参与，M.trimTarget 纯逻辑） ---- */
+    (function () {
+      const T = DP.model;
+      const LN = (x1, y1, x2, y2) => ({ id: 'L' + Math.random().toString(36).slice(2, 6), type: 'line', x1, y1, x2, y2, style: {} });
+
+      /* 直线目标 × 圆切割：两交点，剪中段 */
+      const ln1 = LN(0, 0, 100, 0);
+      let r = T.trimTarget(ln1, [{ type: 'circle', cx: 50, cy: 0, r: 20, style: {} }], { x: 50, y: 0 });
+      ok('剪直线（圆切）：剩两段', r.pieces && r.pieces.length === 2 && r.pieces[0].type === 'line',
+        r.reason || r.pieces.length);
+      ok('剪直线（圆切）：断点在交点上', Math.abs(r.pieces[0].x2 - 30) < 0.01 && Math.abs(r.pieces[1].x1 - 70) < 0.01,
+        r.pieces[0].x2 + ',' + r.pieces[1].x1);
+      ok('剪直线（圆切）：首件沿用目标 id', r.pieces[0].id === ln1.id, r.pieces[0].id + ' vs ' + ln1.id);
+
+      const ln2 = LN(0, 0, 100, 0);
+      const rr2 = T.trimTarget(ln2, [{ type: 'circle', cx: 50, cy: 0, r: 20, style: {} }], { x: 10, y: 0 });
+      ok('剪直线：点在哪段删哪段', rr2.pieces.length === 1 && Math.abs(rr2.pieces[0].x1 - 30) < 0.01 && rr2.pieces[0].x2 === 100,
+        rr2.pieces.length + ' ' + (rr2.pieces[0] && rr2.pieces[0].x1));
+
+      /* 弧切割者只在其弧范围内生效 */
+      const arcCut = { type: 'arc', cx: 50, cy: 0, r: 20, a0: 90, a1: 270, style: {} };
+      const rr3 = T.trimTarget(LN(0, 0, 100, 0), [arcCut], { x: 80, y: 0 });
+      ok('弧作切割者：只算弧上的交点', rr3.pieces && rr3.pieces.length === 1 && Math.abs(rr3.pieces[0].x2 - 30) < 0.01,
+        rr3.reason || (rr3.pieces[0] && rr3.pieces[0].x2));
+
+      /* 无交点不剪 */
+      const rr4 = T.trimTarget(LN(0, 0, 100, 0), [LN(200, 200, 300, 300)], { x: 50, y: 0 });
+      ok('无交点：给理由不误删', !rr4.pieces && !!rr4.reason, rr4.reason);
+
+      /* 整圆目标 × 两条正交直径：剪掉一个象限 → 环绕单弧 */
+      const cc = { id: 'cc', type: 'circle', cx: 0, cy: 0, r: 50, style: {} };
+      const cutters = [LN(-100, 0, 100, 0), LN(0, -100, 0, 100)];
+      const rc = T.trimTarget(cc, cutters, { x: 35, y: 35 });
+      ok('剪圆：两交点剪掉点击段', rc.pieces && rc.pieces.length === 1 && rc.pieces[0].type === 'arc',
+        rc.reason || rc.pieces.length);
+      ok('剪圆：余弧 90°→360°（跨过其余象限）', rc.pieces && Math.abs(rc.pieces[0].a0 - 90) < 0.01 && Math.abs(rc.pieces[0].a1 - 360) < 0.01,
+        rc.pieces && rc.pieces[0].a0 + '~' + rc.pieces[0].a1);
+      ok('剪圆：余弧沿用目标 id/半径', rc.pieces[0].id === 'cc' && rc.pieces[0].r === 50);
+
+      /* 圆 × 圆 */
+      const rc2 = T.trimTarget(cc, [{ type: 'circle', cx: 80, cy: 0, r: 50, style: {} }], { x: 50, y: 0 });
+      ok('圆切圆：交点成弧', rc2.pieces && rc2.pieces.length === 1 && rc2.pieces[0].a0 > 30 && rc2.pieces[0].a0 < 40 && Math.abs(rc2.pieces[0].a1 - 360) < 0.01,
+        rc2.reason || rc2.pieces[0].a0 + '~' + rc2.pieces[0].a1);
+
+      /* 弧目标 × 弦：剪掉中段 → 两段弧（角 90° 的点在 (0, +50)，屏幕系 y 向下） */
+      const ar = { id: 'ar', type: 'arc', cx: 0, cy: 0, r: 50, a0: 0, a1: 180, style: {} };
+      const ra = T.trimTarget(ar, [LN(-100, 25, 100, 25)], { x: 0, y: 50 });
+      ok('剪弧：中段删除剩两段', ra.pieces && ra.pieces.length === 2 && ra.pieces.every((q) => q.type === 'arc'),
+        ra.reason || ra.pieces.length);
+      ok('剪弧：断口角正确', ra.pieces && ra.pieces.length === 2 && Math.abs(ra.pieces[0].a1 - 30) < 0.01 && Math.abs(ra.pieces[1].a0 - 150) < 0.01,
+        ra.pieces[0].a1 + ',' + ra.pieces[1].a0);
+
+      /* 弧目标：点击端头段只删一段 */
+      const ra2 = T.trimTarget(ar, [LN(-100, 25, 100, 25)], { x: -49, y: 9 });
+      ok('剪弧：点端头删一段', ra2.pieces && ra2.pieces.length === 1 && ra2.pieces[0].a0 === 0 && Math.abs(ra2.pieces[0].a1 - 150) < 0.01,
+        ra2.reason || (ra2.pieces[0] && ra2.pieces[0].a0 + '~' + ra2.pieces[0].a1));
+    })();
   } catch (e) {
     ok('运行异常', false, e && e.message);
   }

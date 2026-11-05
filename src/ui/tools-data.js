@@ -30,7 +30,7 @@
     { id: 'text', ch: '文', name: '文字', key: 'T', g: 'text', hint: '单击落字；支持 x^{2}、A_{1}' },
     { id: 'dim', ch: '尺', name: '尺寸', key: 'M', g: 'text', hint: '单击两点生成尺寸线' },
     { id: 'angle', ch: '角', name: '角度', key: 'N', g: 'text', hint: '单击顶点 → 边1 → 边2' },
-    { id: 'trim', ch: '剪', name: '修剪', key: 'X', g: 'edit', hint: '单击线段上要剪掉的部分' },
+    { id: 'trim', ch: '剪', name: '修剪', key: 'X', g: 'edit', hint: '单击线段/圆/弧上要剪掉的部分' },
     { id: 'eraser', ch: '擦', name: '橡皮', key: 'K', g: 'edit', hint: '按住拖过对象即删除' },
     { id: 'fill', ch: '漆', name: '填充', key: 'B', g: 'edit', hint: '单击封闭图形填充当前颜色' },
   ];

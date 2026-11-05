@@ -167,6 +167,13 @@ if (mod && mod.translate) { mod.translate(o, dx, dy); } else { /* 旧 switch 分
 - **绘制交互**（ui.js `onDown` 的 bezier 分支 + `finishBez`）：单击加点（Shift/Ctrl 加点 = 折角）→ 按下后拖动即拉出该点把柄（两侧对称记录 `in/out`）；**双击 / 回车 / 右键 / 点回起点（≥3 点，自动闭合）** 四种方式收笔；Esc 取消。收笔以**已落锚点**成曲线（右键收笔不再把光标处当终点），收笔后自动选中新曲线、工具不切换（可连续画）。预览与成图共用 `curveThrough`，形状一致。
 - **把柄 UI**（ui.js `overlaySvg` + `handleAt` + node 拖动分支）：锚点画空心方块（沿用 EE 节点样式）、把柄画蓝圆点 + 到锚点的牵引虚线；命中规则是「取最近节点，把柄必须比锚点近 2px 以上才优先」（把柄收回到锚点上时拖的是锚点）；把柄拖动**不吸附**、`shiftKey` 传 `mirror`。**双击曲线本体 = 插入锚点**（onDbl 的 path 分支）。
 
+### 4.8 修剪几何：`M.trimTarget`（阶段 8-b，圆/弧参与）
+
+- **唯一几何来源 `core.js` 的 `M.trimTarget(target, others, p)`**（纯逻辑，可在 Node/自检页测）：目标支持 `line / circle / arc`；切割者支持 `line / polyline / rect / circle / arc`（圆状 ellipse 视作圆）。返回 `{ pieces: [替换对象] }` 或 `{ reason: '提示' }`；**首件沿用目标 id**（选择/分组引用不失效）。ui.js 的 `doTrim` 只做「命中（hitObject，线/圆/弧）→ 调 trimTarget → splice + history」，**别在 ui.js 里写求交**。
+- **直线目标**：收集切割者在目标上的参数 `t`（segSeg；圆/弧走 segCircle，弧要按 `onArcAngle` 过滤角范围），剪掉点击 `t0` 所在的相邻交点区间。无交点返回 reason（不再静默删除整条线）。
+- **圆/弧目标**：把每个交点换算成沿弧位置 `u = ((角 - base) % 360 + 360) % 360 ∈ [0, span]`（circle 的 base=0/span=360，arc 用自身 a0/a1），剪掉点击 `u0` 所在区间。余弧区间：**整圆 → 环绕单弧**（`hi>=span` 时归一为 `[0, lo]`，避免 a0 超过 360°）；**弧 → 端头一段或两段**。角度容差 0.4°，防浮点毛刺。
+- **新切割者类型**只需在 `trimSegsOf`（线段集）或 `trimCircleOf`（圆集，arc 带 `arc` 字段过滤角范围）加一个分支。
+
 ## 5. 标准任务手册
 
 ### 5.1 新增一个图元类型（12 步）

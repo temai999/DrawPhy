@@ -554,6 +554,37 @@
     (pdf17.match(/size:[^;]+/) || [''])[0]);
   t('PDF：内嵌导出 SVG 并自动触发打印', /<svg xmlns/.test(pdf17) && /window\.print\(\)/.test(pdf17));
 
+  /* ---------- 18. 修剪：圆/弧参与（阶段 8-b） ---------- */
+  (function () {
+    DP.state.objects = [];
+    DP.state.selection = new Set();
+    /* 圆 + 正交直径线，修剪右上象限 */
+    DP.state.objects.push({ id: 'cT', type: 'circle', cx: 300, cy: 260, r: 80, style: Object.assign({}, DP.state.style) });
+    DP.state.objects.push({ id: 'lH', type: 'line', x1: 180, y1: 260, x2: 420, y2: 260, style: Object.assign({}, DP.state.style) });
+    DP.state.objects.push({ id: 'lV', type: 'line', x1: 300, y1: 140, x2: 300, y2: 380, style: Object.assign({}, DP.state.style) });
+    DP.ui.setTool('trim');
+    click(300 + 56.6, 260 - 56.6); /* 屏幕右上象限中点（角度 315°） */
+    const arc18 = DP.state.objects.filter((o) => o.type === 'arc');
+    t('修剪：圆被剪成弧', arc18.length === 1, DP.state.objects.map((o) => o.type).join(','));
+    t('修剪：余弧角度正确（0°→270°，归一化不超 360）', arc18.length === 1 && Math.abs(arc18[0].a0) < 0.1 && Math.abs(arc18[0].a1 - 270) < 0.1,
+      arc18[0] && arc18[0].a0 + '~' + arc18[0].a1);
+    t('修剪：余弧沿用目标 id', arc18.length === 1 && arc18[0].id === 'cT', arc18[0] && arc18[0].id);
+    /* 弧再被水平弦 + 竖直直径剪：中段删除 → 两段弧 */
+    DP.state.objects = DP.state.objects.filter((o) => o.id !== 'lH');
+    DP.state.objects.push({ id: 'lChord', type: 'line', x1: 150, y1: 220, x2: 450, y2: 220, style: Object.assign({}, DP.state.style) });
+    click(221, 248); /* 弧上 188° 附近 */
+    const arcs2 = DP.state.objects.filter((o) => o.type === 'arc');
+    t('修剪：弧剪中段剩两段', arcs2.length === 2
+      && Math.abs(arcs2[0].a0) < 0.1 && Math.abs(arcs2[0].a1 - 90) < 0.1
+      && Math.abs(arcs2[1].a0 - 210) < 0.1 && Math.abs(arcs2[1].a1 - 270) < 0.1,
+      arcs2.map((o) => o.a0 + '~' + o.a1).join(','));
+    /* 无交点时给出理由且不误删 */
+    DP.state.objects = DP.state.objects.filter((o) => o.type === 'arc' || o.id === 'lChord');
+    const before18 = DP.state.objects.length;
+    click(600, 500); /* 空白处 */
+    t('修剪：空白点击不误删', DP.state.objects.length === before18, DP.state.objects.length + ' vs ' + before18);
+  })();
+
   if (errors.length) out.push('PAGE_ERRORS: ' + errors.join(' | '));
   out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
   document.getElementById('r').textContent = out.join('\n');

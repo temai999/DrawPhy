@@ -2295,52 +2295,18 @@
     let target = null;
     for (let i = st.objects.length - 1; i >= 0; i--) {
       const o = st.objects[i];
-      if (o.type === 'line' && G.distToSeg(p, { x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 }) <= tol) { target = o; break; }
+      if (o.type !== 'line' && o.type !== 'circle' && o.type !== 'arc') continue;
+      if (hitObject(o, p, tol)) { target = o; break; }
     }
-    if (!target) { U.toast('修剪目前支持直线段（请对准线段点击）'); return; }
-    const A = { x: target.x1, y: target.y1 }, B = { x: target.x2, y: target.y2 };
-    const L = G.dist(A, B) || 1;
-    const ts = [0, 1];
-    const project = (q) => {
-      const t = ((q.x - A.x) * (B.x - A.x) + (q.y - A.y) * (B.y - A.y)) / (L * L);
-      return t >= 0 && t <= 1 ? t : null;
-    };
-    for (const o of st.objects) {
-      if (o.id === target.id) continue;
-      if (o.type === 'line') {
-        const q = G.segSeg(A, B, { x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 });
-        if (q) ts.push(q.t);
-      } else if (o.type === 'polyline') {
-        for (let k = 0; k < o.points.length - 1; k++) {
-          const q = G.segSeg(A, B, { x: o.points[k][0], y: o.points[k][1] }, { x: o.points[k + 1][0], y: o.points[k + 1][1] });
-          if (q) ts.push(q.t);
-        }
-      } else if (o.type === 'rect') {
-        const cs = [[o.x, o.y], [o.x + o.w, o.y], [o.x + o.w, o.y + o.h], [o.x, o.y + o.h]];
-        for (let k = 0; k < 4; k++) {
-          const q = G.segSeg(A, B, { x: cs[k][0], y: cs[k][1] }, { x: cs[(k + 1) % 4][0], y: cs[(k + 1) % 4][1] });
-          if (q) ts.push(q.t);
-        }
-      } else if (o.type === 'circle' || (o.type === 'ellipse' && Math.abs(o.rx - o.ry) < 0.5)) {
-        const r = o.type === 'circle' ? o.r : o.rx;
-        for (const q of G.segCircle(A, B, { x: o.cx, y: o.cy }, r)) ts.push(q.t);
-      }
+    if (!target) { U.toast('修剪支持直线、圆和圆弧（请对准线条点击）'); return; }
+    const res = M.trimTarget(target, st.objects.filter((o) => o.id !== target.id), p);
+    if (!res || !res.pieces || !res.pieces.length) {
+      U.toast((res && res.reason) || '这里没有可剪掉的部分');
+      return;
     }
-    const sorted = ts.sort((x, y) => x - y);
-    const t0 = project(p);
-    let lo = 0, hi = 1;
-    for (let i = 0; i < sorted.length - 1; i++) {
-      if (t0 != null && t0 >= sorted[i] && t0 <= sorted[i + 1]) { lo = sorted[i]; hi = sorted[i + 1]; break; }
-    }
-    if (hi - lo < 0.001) { U.toast('这里没有可剪掉的部分'); return; }
     DP.history.push();
-    const P0 = { x: A.x + lo * (B.x - A.x), y: A.y + lo * (B.y - A.y) };
-    const P1 = { x: A.x + hi * (B.x - A.x), y: A.y + hi * (B.y - A.y) };
-    const pieces = [];
-    if (lo > 0.001) pieces.push({ x1: A.x, y1: A.y, x2: P0.x, y2: P0.y });
-    if (hi < 0.999) pieces.push({ x1: P1.x, y1: P1.y, x2: B.x, y2: B.y });
     const idx = st.objects.indexOf(target);
-    st.objects.splice(idx, 1, ...pieces.map((q) => Object.assign({ id: M.uid('l'), type: 'line', style: M.clone(target.style) }, q)));
+    st.objects.splice(idx, 1, ...res.pieces);
     U.toast('已修剪一段');
     afterChange();
   }

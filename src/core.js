@@ -803,6 +803,132 @@
     return plan;
   };
 
+  /* --------------------------- 修剪（阶段 8-b：圆/弧参与） ---------------------------
+   * 目标：line / circle / arc；切割者：line / polyline / rect / circle / arc（含圆状 ellipse）。
+   * 纯逻辑：返回 { pieces: [可直接 splice 进 objects 的替换对象] }
+   * 或 { reason: '提示文案' }。首件沿用目标 id（选择/分组引用不失效）。
+   */
+  const trimSegsOf = (o) => {
+    if (o.type === 'line') return [[o.x1, o.y1, o.x2, o.y2]];
+    if (o.type === 'polyline') {
+      const s = [];
+      for (let i = 0; i < o.points.length - 1; i++) {
+        s.push([o.points[i][0], o.points[i][1], o.points[i + 1][0], o.points[i + 1][1]]);
+      }
+      return s;
+    }
+    if (o.type === 'rect') {
+      return [
+        [o.x, o.y, o.x + o.w, o.y], [o.x + o.w, o.y, o.x + o.w, o.y + o.h],
+        [o.x + o.w, o.y + o.h, o.x, o.y + o.h], [o.x, o.y + o.h, o.x, o.y],
+      ];
+    }
+    return [];
+  };
+  const trimCircleOf = (o) => {
+    if (o.type === 'circle') return { cx: o.cx, cy: o.cy, r: o.r, arc: null };
+    if (o.type === 'arc') return { cx: o.cx, cy: o.cy, r: o.r, arc: o };
+    if (o.type === 'ellipse' && Math.abs(o.rx - o.ry) < 0.5) return { cx: o.cx, cy: o.cy, r: o.rx, arc: null };
+    return null;
+  };
+  const onArcAngle = (arc, q) => {
+    let a = G.deg(Math.atan2(q.y - arc.cy, q.x - arc.cx));
+    while (a < arc.a0) a += 360;
+    return a <= arc.a1 + 0.01;
+  };
+
+  M.trimTarget = function (target, others, p) {
+    const style = () => M.clone(target.style || DP.state.style);
+    const carry = (q, i) => {
+      if (i === 0) q.id = target.id;                /* 首件沿用 id：选择/分组不失效 */
+      if (target.group) q.group = target.group;
+      return q;
+    };
+
+    /* ---- 目标：直线段 ---- */
+    if (target.type === 'line') {
+      const A = { x: target.x1, y: target.y1 }, B = { x: target.x2, y: target.y2 };
+      const LL = (B.x - A.x) * (B.x - A.x) + (B.y - A.y) * (B.y - A.y) || 1;
+      const ts = [];
+      for (const o of others) {
+        for (const [x1, y1, x2, y2] of trimSegsOf(o)) {
+          const q = G.segSeg(A, B, { x: x1, y: y1 }, { x: x2, y: y2 });
+          if (q) ts.push(q.t);
+        }
+        const c = trimCircleOf(o);
+        if (c) {
+          for (const q of G.segCircle(A, B, { x: c.cx, y: c.cy }, c.r)) {
+            if (!c.arc || onArcAngle(c.arc, q)) ts.push(q.t);
+          }
+        }
+      }
+      if (!ts.length) return { reason: '附近没有相交的线条，无法修剪' };
+      const t0 = Math.max(0, Math.min(1, ((p.x - A.x) * (B.x - A.x) + (p.y - A.y) * (B.y - A.y)) / LL));
+      const pts = [0].concat(ts.sort((a, b) => a - b), [1]);
+      let lo = 0, hi = 1;
+      for (let i = 0; i < pts.length - 1; i++) {
+        if (t0 >= pts[i] && t0 <= pts[i + 1]) { lo = pts[i]; hi = pts[i + 1]; break; }
+      }
+      if (hi - lo < 0.001) return { reason: '这里没有可剪掉的部分' };
+      const pieces = [];
+      if (lo > 0.001) pieces.push(carry({ id: M.uid('l'), type: 'line', x1: A.x, y1: A.y, x2: A.x + lo * (B.x - A.x), y2: A.y + lo * (B.y - A.y), style: style() }, pieces.length));
+      if (hi < 0.999) pieces.push(carry({ id: M.uid('l'), type: 'line', x1: A.x + hi * (B.x - A.x), y1: A.y + hi * (B.y - A.y), x2: B.x, y2: B.y, style: style() }, pieces.length));
+      return pieces.length ? { pieces } : { reason: '这里没有可剪掉的部分' };
+    }
+
+    /* ---- 目标：圆 / 弧（交点换算成沿弧位置 u ∈ [0, span]） ---- */
+    if (target.type === 'circle' || target.type === 'arc') {
+      const full = target.type === 'circle';
+      const base = full ? 0 : target.a0;
+      const span = full ? 360 : target.a1 - target.a0;
+      if (span <= 0.01) return { reason: '这里没有可剪掉的部分' };
+      const angOf = (q) => ((G.deg(Math.atan2(q.y - target.cy, q.x - target.cx)) - base) % 360 + 360) % 360;
+      const us = [];
+      const addCut = (q) => {
+        const u = angOf(q);
+        if (u <= span + 0.4) us.push(Math.min(u, span));
+      };
+      for (const o of others) {
+        for (const [x1, y1, x2, y2] of trimSegsOf(o)) {
+          for (const q of G.segCircle({ x: x1, y: y1 }, { x: x2, y: y2 }, { x: target.cx, y: target.cy }, target.r)) addCut(q);
+        }
+        const c = trimCircleOf(o);
+        if (c) {
+          for (const q of G.circleCircle({ x: target.cx, y: target.cy }, target.r, { x: c.cx, y: c.cy }, c.r)) {
+            if (!c.arc || onArcAngle(c.arc, q)) addCut(q);
+          }
+        }
+      }
+      if (!us.length) return { reason: '附近没有相交的线条，无法修剪' };
+      us.sort((a, b) => a - b);
+      const cuts = [];
+      for (const u of us) if (!cuts.length || u - cuts[cuts.length - 1] > 0.3) cuts.push(u);
+      const u0 = Math.min(angOf(p), span);
+      const pts = [0].concat(cuts, [span]);
+      let lo = 0, hi = span;
+      for (let i = 0; i < pts.length - 1; i++) {
+        if (u0 >= pts[i] && u0 <= pts[i + 1]) { lo = pts[i]; hi = pts[i + 1]; break; }
+      }
+      if (hi - lo < 0.4) return { reason: '这里没有可剪掉的部分' };
+      /* 余弧区间（u 空间）：整圆去掉一段 → 环绕单弧（越过 360° 时归一回 0 起）；弧去掉中段 → 两段 */
+      const intervals = [];
+      if (full) intervals.push(hi >= span ? [0, lo] : [hi, span + lo]);
+      else {
+        if (lo > 0.4) intervals.push([0, lo]);
+        if (hi < span - 0.4) intervals.push([hi, span]);
+      }
+      const pieces = intervals
+        .filter((iv) => iv[1] - iv[0] > 0.4)
+        .map((iv, i) => carry({
+          id: M.uid('a'), type: 'arc', cx: target.cx, cy: target.cy, r: target.r,
+          a0: G.round(base + iv[0]), a1: G.round(base + iv[1]), style: style(),
+        }, i));
+      return pieces.length ? { pieces } : { reason: '这里没有可剪掉的部分' };
+    }
+
+    return { reason: '修剪目前支持直线、圆和圆弧' };
+  };
+
   /* --------------------------- 对象变换原语 --------------------------- */
   M.translateObj = function (o, dx, dy) {
     const mod = moduleOf(o);
