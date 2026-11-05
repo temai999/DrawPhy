@@ -515,6 +515,129 @@
     return n;
   };
 
+  /* ---------------- 破口接线（阶段 7-b）：元器件插入已有导线 ----------------
+     把两端元器件放在导线上时，导线在该处断成两段，两段内侧端点各自粘到元器件
+     的两个命名端子上（bind.terminal）。之后拖动/旋转元器件，两段导线跟着走。
+     这里只放纯几何/数据逻辑（无 DOM），ui.js 负责预览、吸附与提示。 */
+  function partThroughPair(def) {
+    const ts = (def && def.terminals) || [];
+    if (ts.length !== 2) return null;
+    const a = ts[0], b = ts[1];
+    /* 端子连线长度须 ≥ 部件长边一半：钟/插座这类端子挤在一角的不参与 */
+    if (Math.hypot(b.x - a.x, b.y - a.y) < Math.max(def.w, def.h) * 0.5) return null;
+    return [a, b];
+  }
+  M.partThroughPair = partThroughPair;
+
+  function segParam(p, x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const L2 = dx * dx + dy * dy;
+    if (!L2) return 0;
+    return ((p.x - x1) * dx + (p.y - y1) * dy) / L2;
+  }
+
+  /* 找落点附近的导线（只认 line：箭头/光线有方向语义，不参与破口） */
+  M.findInsertWire = function (p, def) {
+    if (!partThroughPair(def)) return null;
+    const tol = Math.max(12, Math.min(def.w, def.h) * 0.6);
+    let best = null;
+    for (const o of DP.state.objects) {
+      if (o.type !== 'line' || o.locked) continue;
+      const t = segParam(p, o.x1, o.y1, o.x2, o.y2);
+      if (t < -0.02 || t > 1.02) continue;
+      const d = G.distToSeg(p, { x: o.x1, y: o.y1 }, { x: o.x2, y: o.y2 });
+      if (d > tol) continue;
+      if (!best || d < best.d) best = { wire: o, d, t };
+    }
+    return best ? best.wire : null;
+  };
+
+  /* 在 0/90/180/270 里挑端子连线最贴合导线方向的旋转角（同分取小角度） */
+  M.bestPartRot = function (def, cx, cy, angle) {
+    const pair = partThroughPair(def);
+    if (!pair) return 0;
+    let bestRot = 0, bestScore = -1;
+    for (const rot of [0, 90, 180, 270]) {
+      const m = M.partMatrix({ partId: def.id, x: cx - def.w / 2, y: cy - def.h / 2, s: 1, rot, flip: false });
+      const a = G.apply(m, { x: pair[0].x, y: pair[0].y });
+      const b = G.apply(m, { x: pair[1].x, y: pair[1].y });
+      const vx = b.x - a.x, vy = b.y - a.y;
+      const vl = Math.hypot(vx, vy) || 1;
+      const score = Math.abs((vx * Math.cos(angle) + vy * Math.sin(angle)) / vl);
+      if (score > bestScore + 1e-6) { bestScore = score; bestRot = rot; }
+    }
+    return bestRot;
+  };
+
+  /* 计算一次放置的最终位置（ui 预览与真正放置共用，保证所见即所得） */
+  M.planPartAt = function (def, pid, world, nudge) {
+    const target = { x: world.x + (nudge ? nudge.x : 0), y: world.y + (nudge ? nudge.y : 0) };
+    const wire = M.findInsertWire(target, def);
+    let cx = target.x, cy = target.y, rot = 0;
+    if (wire) {
+      const t = Math.max(0, Math.min(1, segParam(target, wire.x1, wire.y1, wire.x2, wire.y2)));
+      cx = wire.x1 + (wire.x2 - wire.x1) * t;
+      cy = wire.y1 + (wire.y2 - wire.y1) * t;
+      rot = M.bestPartRot(def, cx, cy, Math.atan2(wire.y2 - wire.y1, wire.x2 - wire.x1));
+    }
+    const mod = moduleOf({ type: 'part' });
+    const obj = mod && typeof mod.defaults === 'function'
+      ? mod.defaults({ partId: pid, x: cx - def.w / 2, y: cy - def.h / 2, rot })
+      : { type: 'part', partId: pid, x: cx - def.w / 2, y: cy - def.h / 2, s: 1, rot, flip: false };
+    obj.id = 'preview';
+    obj.style = M.clone(DP.state.style);
+    return { obj, wire, rot, cx, cy };
+  };
+
+  /* 把元器件插进导线：原导线 → 两段，内侧端点绑端子；外侧端点保留原有绑定 */
+  M.breakWireInto = function (wire, part) {
+    const def = DP.parts.byId[part.partId];
+    const pair = partThroughPair(def);
+    if (!pair) return false;
+    const pa = M.terminalPoint(part, pair[0].id);
+    const pb = M.terminalPoint(part, pair[1].id);
+    if (!pa || !pb) return false;
+    const ta = segParam(pa, wire.x1, wire.y1, wire.x2, wire.y2);
+    const tb = segParam(pb, wire.x1, wire.y1, wire.x2, wire.y2);
+    const near = ta <= tb ? { pt: pa, tid: pair[0].id } : { pt: pb, tid: pair[1].id };
+    const far = ta <= tb ? { pt: pb, tid: pair[1].id } : { pt: pa, tid: pair[0].id };
+    const lineMod = moduleOf({ type: 'line' });
+    const mk = (props) => {
+      const l = lineMod && lineMod.defaults ? lineMod.defaults(props) : Object.assign({}, props);
+      l.type = 'line';                       /* defaults 不带 type，分派靠它 */
+      l.style = M.clone(wire.style || DP.state.style);
+      if (wire.dash) l.dash = wire.dash;
+      if (wire.locked) l.locked = wire.locked;
+      return l;
+    };
+    const L1 = mk({ x1: wire.x1, y1: wire.y1, x2: near.pt.x, y2: near.pt.y });
+    L1.id = wire.id;                         /* 保留原 id：分组/选择/引用不失效 */
+    if (wire.group) L1.group = wire.group;
+    L1.bind = {};
+    if (wire.bind && wire.bind.x1) L1.bind.x1 = M.clone(wire.bind.x1);
+    L1.bind.x2 = { id: part.id, terminal: near.tid, dx: 0, dy: 0 };
+    const L2 = mk({ x1: far.pt.x, y1: far.pt.y, x2: wire.x2, y2: wire.y2 });
+    L2.id = M.uid('ln');
+    if (wire.group) L2.group = wire.group;
+    L2.bind = { x1: { id: part.id, terminal: far.tid, dx: 0, dy: 0 } };
+    if (wire.bind && wire.bind.x2) L2.bind.x2 = M.clone(wire.bind.x2);
+    const idx = DP.state.objects.indexOf(wire);
+    if (idx < 0) return false;
+    DP.state.objects.splice(idx, 1, L1, L2);
+    return true;
+  };
+
+  /* 破口接线主流程：计划位置 → 入场景 → 断线接入。返回 plan（含 obj/wire/broke） */
+  M.insertPartIntoScene = function (pid, world) {
+    const def = DP.parts.byId[pid];
+    if (!def) return null;
+    const plan = M.planPartAt(def, pid, world, null);
+    plan.obj.id = M.uid('pt');
+    DP.state.objects.push(plan.obj);
+    plan.broke = plan.wire ? M.breakWireInto(plan.wire, plan.obj) : false;
+    return plan;
+  };
+
   /* --------------------------- 对象变换原语 --------------------------- */
   M.translateObj = function (o, dx, dy) {
     const mod = moduleOf(o);

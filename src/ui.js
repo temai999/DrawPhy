@@ -16,6 +16,9 @@
   let board, worldLayer, hintEl, zoomEl, toastEl, textInput;
   let spaceDown = false;
   let D = null; // 当前交互
+  /* 部件放置预览 + 方向键微调偏移（破口接线预览共用） */
+  let partPreview = null;
+  let partNudge = { x: 0, y: 0 };
   U.snapInfo = null;
   const inlineOrder = []; // 已展开面板的打开顺序（key），用于 LRU 收起，不依赖 DOM 位置
 
@@ -517,28 +520,30 @@
     return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
   }
 
-  /* 在世界坐标处放入一个部件；keepTool=true 时保持连续放置 */
+  /* -------------------- 破口接线：把元器件插入到已有导线上 --------------------
+     几何/数据逻辑在 core.js（M.planPartAt / M.insertPartIntoScene / M.breakWireInto），
+     这里只做吸附、历史、选中、提示与预览。 */
   function placePartAt(pid, world, keepTool) {
     const def = DP.parts.byId[pid];
     if (!def) return;
     const sp = DP.snap.resolve(world, { radius: 11 / st.view.k });
     DP.history.push();
-    /* 构造走模块 defaults 工厂（阶段 5）：模块缺失时回退内联构造，字段保持一致 */
-    const mod = M.moduleOf({ type: 'part' });
-    const o = mod && typeof mod.defaults === 'function'
-      ? mod.defaults({ partId: pid, x: sp.x - def.w / 2, y: sp.y - def.h / 2 })
-      : {
-        id: M.uid('pt'), type: 'part', partId: pid,
-        x: sp.x - def.w / 2, y: sp.y - def.h / 2, s: 1, rot: 0, flip: false,
-      };
-    o.id = M.uid('pt');
-    o.style = M.clone(st.style);
-    st.objects.push(o);
-    DP.sel.set([o.id]);
+    const plan = M.insertPartIntoScene(pid, { x: sp.x + partNudge.x, y: sp.y + partNudge.y });
+    const broke = !!(plan && plan.broke);
+    partNudge = { x: 0, y: 0 };
+    DP.sel.set([plan.obj.id]);
     if (!keepTool) U.setTool('select');
     afterChange();
-    U.toast(`已放入「${def.name}」，可直接拖动调整位置`);
+    U.toast(broke
+      ? `已把「${def.name}」接入导线：导线自动断成两段，拖动元器件导线会跟随`
+      : `已放入「${def.name}」，可直接拖动调整位置`);
   }
+  /* 自检钩子：按世界坐标直接放置（_check/test.html 驱动破口接线断言用） */
+  U._testInsertPart = function (pid, wx, wy) {
+    placePartAt(pid, { x: wx, y: wy }, false);
+    const objs = DP.state.objects;
+    return objs[objs.length - 1];
+  };
 
   /* ---------------------- 部件库拖入画布（带预览） ---------------------- */
   let partDrag = null;
@@ -718,6 +723,8 @@
     st.toolOpts = opts || {};
     D = null;
     U.snapInfo = null;
+    partPreview = null;
+    partNudge = { x: 0, y: 0 };
     document.querySelectorAll('.tool').forEach((b) => b.classList.toggle('on', b.dataset.tool === id));
     document.querySelectorAll('.part').forEach((b) => {
       const on = id === 'part' && st.toolOpts.partId === b.dataset.part;
@@ -725,7 +732,7 @@
     });
     board.style.cursor = CURSORS[id] || 'default';
     const t = TOOLS.find((x) => x.id === id);
-    U.hint(id === 'part' ? `放置部件：${DP.parts.byId[st.toolOpts.partId] ? DP.parts.byId[st.toolOpts.partId].name : ''}（Esc 退出）` : t ? `${t.name}：${t.hint}` : '');
+    U.hint(id === 'part' ? `放置部件：${DP.parts.byId[st.toolOpts.partId] ? DP.parts.byId[st.toolOpts.partId].name : ''}（放在导线上会自动破口接入；方向键微调，Esc 退出）` : t ? `${t.name}：${t.hint}` : '');
     U.render();
   };
 
@@ -824,6 +831,7 @@
     s += `<rect x="0" y="0" width="${page.w}" height="${page.h}" fill="${page.bg}" stroke="#c9d2dc" stroke-width="${1 / v.k}"/>`;
     if (page.grid && v.k > 0.35) s += DP.render.gridPath(page, '#e6ebf1', st.snap.gridSize);
     s += DP.render.objects(st.objects);
+    if (partPreview) s += previewPartSvg();
     if (D && D.preview) s += `<g opacity="0.8">${DP.render.object(D.preview)}</g>`;
     s += overlaySvg();
     s += `</g>`;
@@ -831,6 +839,29 @@
     board.innerHTML = s;
     if (zoomEl) zoomEl.textContent = Math.round(v.k * 100) + '%';
   };
+
+  /* 部件放置预览：导线会被破口时先盖掉那一小段（页面底色），再画半透明部件与端子点 */
+  function previewPartSvg() {
+    const pv = partPreview;
+    if (!pv || !pv.obj) return '';
+    const pvStyle = pv.obj.style || st.style;
+    let out = '';
+    if (pv.wire) {
+      const pair = M.partThroughPair(DP.parts.byId[pv.obj.partId]);
+      const a = pair && M.terminalPoint(pv.obj, pair[0].id);
+      const b = pair && M.terminalPoint(pv.obj, pair[1].id);
+      if (a && b) {
+        /* 破口：先盖住导线上将被替换的一段 */
+        out += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${st.page.bg}" `
+          + `stroke-width="${(pvStyle.width || 2) + 10}" stroke-linecap="butt"/>`;
+        const r = 3.2 / st.view.k;
+        out += `<circle cx="${a.x}" cy="${a.y}" r="${r}" fill="#0a84ff"/>`
+          + `<circle cx="${b.x}" cy="${b.y}" r="${r}" fill="#0a84ff"/>`;
+      }
+    }
+    out += `<g opacity="0.72">${DP.render.object(pv.obj)}</g>`;
+    return out;
+  }
 
   function overlaySvg() {
     let s = '';
@@ -1341,8 +1372,23 @@
     U.render();
   }
 
+  function refreshPartPreview(world) {
+    const def = DP.parts.byId[st.toolOpts.partId];
+    if (!def) { partPreview = null; return; }
+    const sp = DP.snap.resolve(world, { radius: 11 / st.view.k });
+    partPreview = M.planPartAt(def, def.id, sp, partNudge);
+    partPreview.world = world;
+  }
+
   function onMove(e) {
     if (!D) {
+      /* 部件工具：跟随光标给出放置预览（含破口效果），方向键可微调 */
+      if (st.tool === 'part') {
+        refreshPartPreview(toWorld(e));
+        U.render();
+        return;
+      }
+      if (partPreview) { partPreview = null; U.render(); }
       // 悬停提示
       if (st.tool === 'select') {
         const p = toWorld(e);
@@ -2032,6 +2078,18 @@
           deleteSelection();
           break;
         case 'ArrowUp': case 'ArrowDown': case 'ArrowLeft': case 'ArrowRight': {
+          /* 部件工具：方向键微调放置预览（1px / Shift 10px），不移动已选对象 */
+          if (st.tool === 'part' && partPreview) {
+            e.preventDefault();
+            const step = e.shiftKey ? 10 : 1;
+            if (e.key === 'ArrowLeft') partNudge.x -= step;
+            else if (e.key === 'ArrowRight') partNudge.x += step;
+            else if (e.key === 'ArrowUp') partNudge.y -= step;
+            else partNudge.y += step;
+            refreshPartPreview(partPreview.world || { x: 0, y: 0 });
+            U.render();
+            return;
+          }
           if (!st.selection.size) return;
           e.preventDefault();
           const d = e.shiftKey ? 10 : 1;

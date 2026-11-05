@@ -147,6 +147,12 @@ if (mod && mod.translate) { mod.translate(o, dx, dy); } else { /* 旧 switch 分
 - **线条颜色 / 填充样式 = 色板下拉**（`colorDropHtml()` / `bindColorDrop()` / `syncColorDrop()`）：分区为 自动色 → 标准 → 自定义（localStorage `drawphy.customColors`，选色即存）→ 文档中已使用的颜色（`usedColors()` 扫描对象样式）→ 无填充（仅填充面板）+ 其他颜色…（隐藏原生取色器，**不能 display:none**，否则打不开）。注意：`bindStyleDrops` 的选择器是 `.sdrop:not(.color-drop)`——色板下拉由 `bindColorDrop` 单独绑定，两边都绑会让 toggle 抵消、下拉打不开。
 - **端点粘附**：模块在 `capabilities` 里声明 `bind: true`（line/arrow/ray 已声明），核心与 UI 一律用 `M.isBindable(o)` 判断。**禁止再写 `type === 'line' || type === 'arrow'` 这类硬编码**——光线就是漏改案例。
 
+### 4.5 破口接线与部件放置预览（阶段 7-b）
+
+- **破口接线**：把**两个接线端**的元器件放到导线上时，导线自动断成两段，内侧端点粘到元器件端子。核心逻辑在 `core.js`（纯几何/数据，无 DOM）：`M.partThroughPair(def)`（是否参与：2 端子且端子连线 ≥ 长边一半）、`M.findInsertWire(p, def)`（找落点附近的 line，箭头/光线不参与）、`M.bestPartRot`（0/90/180/270 里挑端子连线最贴合导线方向的角）、`M.planPartAt`（预览与真实放置共用的位置计算）、`M.breakWireInto(wire, part)`（断线 + 端子绑定 + 外侧端点保留原 bind + 保留原对象 id）、`M.insertPartIntoScene(pid, world)`（主流程）。
+- **改这段前必读**：`breakWireInto` 用 `splice(idx, 1, L1, L2)` 原位替换且 **L1 沿用原导线 id**——分组、选择、外部引用都不失效；撤销恢复依赖 placePartAt 的「前 push + afterChange 后 push」双提交模式（第二条通常是空 diff 不入栈）。
+- **放置预览**：part 工具下光标移动即显示半透明部件（`partPreview` 变量 + `previewPartSvg()`），会破口时用页面底色盖掉将被替换的导线段并画出两个端子蓝点。**方向键微调**：part 工具下方向键调 `partNudge` 偏移（1px / Shift 10px），沿导线方向移动插入点；垂直方向若仍在吸附容差（`max(12, min(w,h)*0.6)`）内会被重新吸回导线，这是有意行为。放置后 `partNudge` 归零。
+
 ## 5. 标准任务手册
 
 ### 5.1 新增一个图元类型（12 步）

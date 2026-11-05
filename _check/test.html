@@ -452,6 +452,63 @@
       p5point.hitTest(p5pt, { x: 60, y: 60 }, 1) === false);
     p5point.translate(p5pt, 5, -5);
     ok('point 模块平移', p5pt.x === 55 && p5pt.y === 55);
+
+    /* ---- 阶段 7-b：破口接线（元器件插入导线）——core 层纯逻辑 ---- */
+    try {
+      const wireStl = { stroke: '#22303c', width: 2, dash: 'solid', fill: 'none', opacity: 1, fontSize: 18 };
+      DP.state.objects = [{ id: 'bw1', type: 'line', x1: 100, y1: 300, x2: 600, y2: 300, style: wireStl }];
+      const insPlan = DP.model.insertPartIntoScene('resistor', { x: 350, y: 300 });
+      const insLines = DP.state.objects.filter((o) => o.type === 'line');
+      const insPart2 = DP.state.objects.filter((o) => o.type === 'part')[0];
+      ok('破口接线：1 条导线 → 2 段 + 1 部件',
+        DP.state.objects.length === 3 && insLines.length === 2 && insPart2 && insPart2.rot === 0 && insPlan.broke,
+        'n=' + DP.state.objects.length);
+      ok('破口接线：原 id 保留在外侧段、端子绑定就位',
+        insLines.some((l) => l.id === 'bw1' && l.bind && l.bind.x2 && l.bind.x2.terminal === 'a') &&
+        insLines.every((l) => l.bind && ((l.bind.x1 && l.bind.x1.terminal) || (l.bind.x2 && l.bind.x2.terminal))),
+        JSON.stringify(insLines.map((l) => l.bind)));
+      ok('破口接线：部件中心落在导线上', Math.abs(insPart2.x + 32 - 350) < 0.5 && Math.abs(insPart2.y + 14 - 300) < 0.5,
+        insPart2.x + ',' + insPart2.y);
+      /* 拖动部件 → 两段导线跟随端子 */
+      insPart2.x += 30;
+      DP.model.applyBindings();
+      const fLines = DP.state.objects.filter((o) => o.type === 'line');
+      ok('破口接线：部件移动导线跟随',
+        Math.abs(fLines[0].x2 - (318 + 30)) < 0.5 && Math.abs(fLines[1].x1 - (382 + 30)) < 0.5,
+        fLines.map((l) => Math.round(l.x1) + '-' + Math.round(l.x2)).join('/'));
+      /* 竖直导线 → 部件旋转 90° */
+      DP.state.objects = [{ id: 'bw2', type: 'line', x1: 300, y1: 100, x2: 300, y2: 600, style: wireStl }];
+      DP.model.insertPartIntoScene('lamp', { x: 300, y: 350 });
+      const vPart = DP.state.objects.filter((o) => o.type === 'part')[0];
+      const vLines = DP.state.objects.filter((o) => o.type === 'line');
+      ok('破口接线：竖直导线自动转 90°', vPart.rot === 90 &&
+        Math.abs(vLines[0].y2 - 320) < 0.5 && Math.abs(vLines[1].y1 - 380) < 0.5,
+        vLines.map((l) => Math.round(l.y1) + '-' + Math.round(l.y2)).join('/'));
+      /* 外侧端点原有绑定保留 + 撤销恢复原状 */
+      DP.state.objects = [
+        { id: 'bat9', type: 'part', partId: 'battery', x: 40, y: 270, s: 1, rot: 0, flip: false, style: wireStl },
+        { id: 'bw3', type: 'line', x1: 104, y1: 286, x2: 640, y2: 300, style: wireStl, bind: { x1: { id: 'bat9', terminal: '+', dx: 0, dy: 0 } } },
+      ];
+      DP.history.push();
+      DP.model.insertPartIntoScene('resistor', { x: 380, y: 295 });
+      DP.history.push();
+      const kL1 = DP.state.objects.filter((o) => o.id === 'bw3')[0];
+      ok('破口接线：外侧端点保留原有绑定', !!kL1 && !!kL1.bind && kL1.bind.x1 && kL1.bind.x1.terminal === '+',
+        JSON.stringify(kL1 && kL1.bind));
+      DP.history.undo();
+      ok('破口接线：撤销恢复原导线',
+        DP.state.objects.length === 2 && DP.state.objects.some((o) => o.id === 'bw3'),
+        'n=' + DP.state.objects.length);
+      /* 非两端部件（电池 2 端但端子间距 < 长边一半? 电池 64 宽端子 64 → 参与）：
+         用 3 端子部件验证不参与破口 */
+      DP.state.objects = [{ id: 'bw4', type: 'line', x1: 100, y1: 300, x2: 600, y2: 300, style: wireStl }];
+      const noPlan = DP.model.planPartAt(DP.parts.byId['rheostat'], 'rheostat', { x: 350, y: 300 }, null);
+      ok('破口接线：3 端子部件不参与', noPlan.wire == null && noPlan.rot === 0,
+        'wire=' + (noPlan.wire ? 'yes' : 'no'));
+      DP.state.objects = [];
+    } catch (e) {
+      ok('破口接线运行异常', false, e && e.message);
+    }
   } catch (e) {
     ok('运行异常', false, e && e.message);
   }
