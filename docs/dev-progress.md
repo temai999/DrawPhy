@@ -337,3 +337,14 @@
 - ribbon 样式面板两条下拉定宽 104px；属性面板下拉撑满 + 56px 自定义数值框。
 - 验证：108/108、50/50、23/23、PNG 31758B；截图核对收起/展开/线宽展开三态；
   模拟点选 dashdot + 3 后 DP.state.style 正确、收起态文字同步。
+
+### 阶段 7-a 第四轮（用户反馈）：线条颜色/填充样式改为「色板下拉」（参照经典办公色板）
+- 用户给出参考截图：线条颜色、填充样式各为一个下拉，展开为分区色板。
+- colorDropHtml/bindColorDrop/syncColorDrop（ui.js）：
+  - 分区：自动色(10) → 标准(50,灰阶/深/标准/亮/浅 5 行) → 自定义(localStorage drawphy.customColors，选色即存) → 文档中已使用的颜色(扫描对象样式) → 无填充(仅填充) / 其他颜色…(隐藏原生取色器，不能 display:none)。
+  - 收起态 = 色块 + 颜色名（无填充时红斜线色块 + 无填充）。
+  - 菜单 data-menu-w=204 覆盖 placeDropMenu 默认宽；fixed 定位同线样下拉。
+- ribbon 样式面板改 4 行：线条颜色/线型/线宽/填充样式（style-grid3 改 repeat(4,28px)，style-label 去 26px 定宽改 nowrap）；旧 swatches/customColor/swFill 按钮全部移除。
+- 属性面板线色/填充行同样换色板下拉（pStrokeDrop/pFillDrop），pFillNone 按钮移除。
+- 踩坑 2 个：① bindProps 重构时丢掉 const s0 声明 → 整页初始化中断（表现：ribbon 空白、属性下拉全空）；② bindStyleDrops 的 '.sdrop' 选择器把色板下拉也绑了一遍，toggle 两次相互抵消 → 改 ':not(.color-drop)'。
+- 验证：108/108、50/50、23/23；截图核对色板展开态；模拟点选 红/蓝/无填充/自定义色 全链路通过（localStorage 与属性面板同步正确）。

@@ -139,13 +139,14 @@
     if (sw && is) sw.innerHTML = is.innerHTML;
     if (tx && it) tx.textContent = it.textContent;
   }
-  /* 菜单 fixed 定位：贴按钮下方，空间不够就翻到上方，左右夹在视口内 */
+  /* 菜单 fixed 定位：贴按钮下方，空间不够就翻到上方，左右夹在视口内。
+     data-menu-w 可指定菜单宽度（色板需要比按钮宽）。 */
   function placeDropMenu(drop) {
     const btn = drop.querySelector('.sdrop-btn');
     const menu = drop.querySelector('.sdrop-menu');
     if (!btn || !menu) return;
     const r = btn.getBoundingClientRect();
-    const w = Math.max(r.width, 140);
+    const w = Math.max(r.width, +drop.dataset.menuW || 140);
     const h = menu.offsetHeight || 0;
     let top = r.bottom + 3;
     if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 3);
@@ -157,9 +158,15 @@
   function closeDrops() {
     document.querySelectorAll('.sdrop.open').forEach((d) => d.classList.remove('open'));
   }
-  /* 绑定一组下拉：事件委托在容器上，动态补进去的选项也能用 */
+  function toggleDrop(drop) {
+    const wasOpen = drop.classList.contains('open');
+    closeDrops();
+    if (!wasOpen) { drop.classList.add('open'); placeDropMenu(drop); }
+  }
+  /* 绑定一组线样下拉：事件委托在容器上，动态补进去的选项也能用。
+     色板下拉(color-drop)由 bindColorDrop 单独绑定，这里跳过，避免 toggle 两次相互抵消 */
   function bindStyleDrops(root, onPick) {
-    root.querySelectorAll('.sdrop').forEach((drop) => {
+    root.querySelectorAll('.sdrop:not(.color-drop)').forEach((drop) => {
       drop.addEventListener('click', (e) => {
         const t = e.target;
         const item = t.closest && t.closest('.sdrop-item');
@@ -175,12 +182,146 @@
         const btn = t.closest && t.closest('.sdrop-btn');
         if (btn && drop.contains(btn)) {
           e.stopPropagation();
-          const wasOpen = drop.classList.contains('open');
-          closeDrops();
-          if (!wasOpen) { drop.classList.add('open'); placeDropMenu(drop); }
+          toggleDrop(drop);
         }
       });
     });
+  }
+
+  /* ------------------- 线条颜色 / 填充样式：色板下拉（参照经典办公布局） -------------------
+     分区：自动色 → 标准 → 自定义(localStorage) → 文档中已使用的颜色 → 无填充(仅填充) / 其他颜色…
+     「其他颜色…」唤起隐藏的原生取色器；新颜色自动存入自定义区。收起态 = 色块 + 颜色名。 */
+  const COLOR_AUTO = ['#1f2d3d', '#ffffff', '#d64545', '#e08a1e', '#f2c14e', '#2fa860', '#0f9bb0', '#2e6fdb', '#7a3fb5', '#8c4510'];
+  const COLOR_STD = [
+    /* 灰阶 */
+    '#000000', '#1a1a1a', '#333333', '#4d4d4d', '#666666', '#808080', '#999999', '#b3b3b3', '#d9d9d9', '#ffffff',
+    /* 深色 */
+    '#7f1d1d', '#7c2d12', '#78350f', '#713f12', '#365314', '#14532d', '#134e4a', '#164e63', '#1e3a8a', '#3b0764',
+    /* 标准 */
+    '#dc2626', '#ea580c', '#d97706', '#ca8a04', '#65a30d', '#16a34a', '#0d9488', '#0891b2', '#2563eb', '#7c3aed',
+    /* 亮色 */
+    '#f87171', '#fb923c', '#fbbf24', '#a3e635', '#4ade80', '#2dd4bf', '#38bdf8', '#818cf8', '#c084fc', '#f472b6',
+    /* 浅色 */
+    '#fecaca', '#fed7aa', '#fde68a', '#d9f99d', '#bbf7d0', '#99f6e4', '#bae6fd', '#c7d2fe', '#e9d5ff', '#fbcfe8',
+  ];
+  const COLOR_NAMES = {
+    '#1f2d3d': '黑', '#22303c': '黑', '#000000': '黑', '#ffffff': '白', '#d64545': '红', '#e08a1e': '橙',
+    '#f2c14e': '黄', '#2fa860': '绿', '#0f9bb0': '青', '#2e6fdb': '蓝', '#7a3fb5': '紫', '#8c4510': '棕',
+  };
+  function colorName(c) {
+    if (!c || c === 'none') return '无填充';
+    return COLOR_NAMES[String(c).toLowerCase()] || String(c).toUpperCase();
+  }
+  function customColors() {
+    try { return JSON.parse(localStorage.getItem('drawphy.customColors') || '[]'); } catch (_) { return []; }
+  }
+  function addCustomColor(c) {
+    if (!/^#[0-9a-f]{6}$/i.test(c)) return false;
+    const saved = customColors();
+    if (saved.indexOf(c) >= 0) return false;
+    saved.unshift(c);
+    localStorage.setItem('drawphy.customColors', JSON.stringify(saved.slice(0, 10)));
+    return true;
+  }
+  /* 文档里已用到的颜色：扫描所有对象样式（排除 none），最多 20 个 */
+  function usedColors(kind) {
+    const out = [];
+    st.objects.forEach((o) => {
+      const c = (o.style || {})[kind];
+      if (c && c !== 'none' && out.indexOf(c) < 0) out.push(c);
+    });
+    return out.slice(0, 20);
+  }
+  function palCell(c) {
+    return `<button type="button" class="pal-c" data-c="${c}" title="${colorName(c)}" `
+      + `style="background:${c}"></button>`;
+  }
+  function palGrid(list, cls) {
+    if (!list.length) return '';
+    return `<div class="pal-grid${cls ? ' ' + cls : ''}">${list.map(palCell).join('')}</div>`;
+  }
+  function colorDropHtml(id, kind) {
+    const customs = customColors();
+    const used = usedColors(kind);
+    const isFill = kind === 'fill';
+    const menu = `<div class="pal-sec">自动色</div>${palGrid(COLOR_AUTO)}`
+      + `<div class="pal-sec">标准</div>${palGrid(COLOR_STD)}`
+      + (customs.length ? `<div class="pal-sec">自定义</div>${palGrid(customs, 'pal-custom')}` : '<div class="pal-custom"></div>')
+      + (used.length ? `<div class="pal-sec">文档中已使用的颜色</div>${palGrid(used)}` : '')
+      + `<div class="pal-foot">`
+      + (isFill ? `<button type="button" class="pal-none" data-c="none">无填充</button>` : '')
+      + `<button type="button" class="pal-more">其他颜色…</button>`
+      + `<input type="color" class="pal-input" aria-hidden="true" tabindex="-1"></div>`;
+    return `<span class="sdrop color-drop" id="${id}" data-kind="${kind}" data-menu-w="204">`
+      + `<button type="button" class="sdrop-btn" title="点击选择颜色">`
+      + `<span class="cswatch"></span><span class="sdrop-txt"></span>${CHEV}</button>`
+      + `<div class="sdrop-menu pal">${menu}</div></span>`;
+  }
+  /* 同步色板下拉收起态：色块、文字、菜单里的选中格 */
+  function syncColorDrop(drop, c) {
+    if (!drop) return;
+    const cur = c || 'none';
+    drop.dataset.cur = cur;
+    const sw = drop.querySelector('.sdrop-btn .cswatch');
+    if (sw) {
+      sw.classList.toggle('is-none', cur === 'none');
+      sw.style.background = cur === 'none' ? 'transparent' : cur;
+    }
+    const tx = drop.querySelector('.sdrop-btn .sdrop-txt');
+    if (tx) tx.textContent = colorName(cur);
+    drop.querySelectorAll('.pal-c').forEach((b) => b.classList.toggle('on', b.dataset.c.toLowerCase() === String(cur).toLowerCase()));
+  }
+  /* 重建所有打开中的色板的自定义区（新存的自定义色立即出现） */
+  function refreshPaletteCustoms() {
+    const saved = customColors();
+    document.querySelectorAll('.sdrop-menu.pal').forEach((menu) => {
+      const box = menu.querySelector('.pal-custom');
+      if (!box) return;
+      box.outerHTML = saved.length
+        ? `<div class="pal-sec">自定义</div>${palGrid(saved, 'pal-custom')}`
+        : '<div class="pal-custom"></div>';
+    });
+  }
+  /* 绑定一个色板下拉：onPick(颜色或 'none')；其他颜色… 走隐藏原生取色器 */
+  function bindColorDrop(drop, onPick) {
+    if (!drop) return;
+    drop.addEventListener('click', (e) => {
+      const t = e.target;
+      const cell = t.closest && t.closest('.pal-c');
+      if (cell && drop.contains(cell)) {
+        e.preventDefault();
+        e.stopPropagation();
+        drop.classList.remove('open');
+        onPick(cell.dataset.c);
+        return;
+      }
+      const none = t.closest && t.closest('.pal-none');
+      if (none && drop.contains(none)) {
+        e.preventDefault();
+        e.stopPropagation();
+        drop.classList.remove('open');
+        onPick('none');
+        return;
+      }
+      const more = t.closest && t.closest('.pal-more');
+      if (more && drop.contains(more)) {
+        e.stopPropagation();
+        const inp = drop.querySelector('.pal-input');
+        if (inp) {
+          const cur = drop.dataset.cur;
+          inp.value = /^#[0-9a-f]{6}$/i.test(cur) ? cur : '#1f2d3d';
+          inp.click();
+        }
+        return;
+      }
+      const btn = t.closest && t.closest('.sdrop-btn');
+      if (btn && drop.contains(btn)) {
+        e.stopPropagation();
+        toggleDrop(drop);
+      }
+    });
+    const inp = drop.querySelector('.pal-input');
+    if (inp) inp.addEventListener('change', () => onPick(inp.value));
   }
 
   /* ------------------------------ 数据驱动面板 ------------------------------ */
@@ -278,21 +419,8 @@
         widthOpts(curW).map((w) => widthItemHtml(w)), curW);
       inner = `<div class="style-grid3">
         <div class="style-row">
-          <span class="style-label">线色</span>
-          <span class="swatches" id="swStroke">
-            <i data-c="#1f2d3d" style="--c:#1f2d3d" title="黑"></i>
-            <i data-c="#d64545" style="--c:#d64545" title="红"></i>
-            <i data-c="#2e6fdb" style="--c:#2e6fdb" title="蓝"></i>
-            <i data-c="#2fa860" style="--c:#2fa860" title="绿"></i>
-            <i data-c="#e08a1e" style="--c:#e08a1e" title="橙"></i>
-            <i data-c="#7a3fb5" style="--c:#7a3fb5" title="紫"></i>
-            <i data-c="#0f9bb0" style="--c:#0f9bb0" title="青"></i>
-            <span id="customSwatches" style="display:contents"></span>
-            <label class="color-pick" title="自定义颜色">
-              <input type="color" id="customColor" value="#1f2d3d">
-              <svg viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 0 7 7h-2a5 5 0 1 1-5-5z"/><circle cx="12" cy="12" r="2.4"/></svg>
-            </label>
-          </span>
+          <span class="style-label">线条颜色</span>
+          ${colorDropHtml('swStroke', 'stroke')}
         </div>
         <div class="style-row">
           <span class="style-label">线型</span>
@@ -303,12 +431,8 @@
           ${widthDrop}
         </div>
         <div class="style-row">
-          <span class="style-label">填充</span>
-          <span class="toolbtns" id="swFill">
-            <button data-f="none" title="无填充">□</button>
-            <button data-f="#ffffff" title="白底填充">▢</button>
-            <button data-f="#1f2d3d" title="实心填充">■</button>
-          </span>
+          <span class="style-label">填充样式</span>
+          ${colorDropHtml('swFill', 'fill')}
         </div>
       </div>`;
     } else if (PANELS[key]) {
@@ -353,45 +477,26 @@
     if (bgCk) bgCk.checked = st.page.grid !== false;
     if (snCk) snCk.checked = st.snap.anchors !== false;
     bindPartButtons(el);
-    /* 样式控件的取值随当前对象/全局样式同步（线型、线宽为线样下拉） */
+    /* 样式控件的取值随当前对象/全局样式同步（线样下拉 + 色板下拉） */
     const markStyleBtns = () => {
       const cur = (DP.sel.list()[0] || {}).style || st.style;
       setDropValue(el.querySelector('#swDash'), cur.dash,
         (v) => dashItemHtml({ id: v, name: v, pattern: DP.style.dashArray(v) }, cur.stroke));
       setDropValue(el.querySelector('#swWidth'), DP.style.normWidth(cur.width),
         (v) => widthItemHtml(v, cur.stroke));
-      el.querySelectorAll('#swFill button').forEach((b) =>
-        b.classList.toggle('on', (b.dataset.f || 'none') === (cur.fill || 'none')));
+      syncColorDrop(el.querySelector('#swStroke'), cur.stroke);
+      syncColorDrop(el.querySelector('#swFill'), cur.fill || 'none');
     };
     const applyAndMark = (patch) => { applyStyle(patch); markStyleBtns(); };
-    el.querySelectorAll('#swStroke i').forEach((s) =>
-      s.addEventListener('click', () => applyAndMark({ stroke: s.dataset.c })));
+    /* 色板选色：新颜色进自定义区并立即在打开中的色板里出现 */
+    const pickColor = (key) => (c) => {
+      if (c !== 'none' && addCustomColor(c)) refreshPaletteCustoms();
+      applyAndMark(key === 'stroke' ? { stroke: c } : { fill: c });
+    };
+    bindColorDrop(el.querySelector('#swStroke'), pickColor('stroke'));
+    bindColorDrop(el.querySelector('#swFill'), pickColor('fill'));
     bindStyleDrops(el, (kind, v) => applyAndMark(kind === 'dash' ? { dash: v } : { width: +v }));
     markStyleBtns();
-    const customInput = el.querySelector('#customColor');
-    let saved = [];
-    try { saved = JSON.parse(localStorage.getItem('drawphy.customColors') || '[]'); } catch (_) {}
-    const renderCustom = () => {
-      const box = el.querySelector('#customSwatches');
-      if (!box) return;
-      box.outerHTML = `<span id="customSwatches" style="display:contents">${saved.map((c) =>
-        `<i data-c="${c}" style="--c:${c}" title="自定义 ${c}"></i>`).join('')}</span>`;
-      el.querySelectorAll('#customSwatches i').forEach((s) =>
-        s.addEventListener('click', () => applyStyle({ stroke: s.dataset.c })));
-    };
-    renderCustom();
-    if (customInput) {
-      customInput.addEventListener('input', (e) => applyStyle({ stroke: e.target.value }));
-      customInput.addEventListener('change', (e) => {
-        const c = e.target.value;
-        if (!saved.includes(c)) {
-          saved.unshift(c);
-          saved = saved.slice(0, 6);
-          localStorage.setItem('drawphy.customColors', JSON.stringify(saved));
-          renderCustom();
-        }
-      });
-    }
     const rib = document.getElementById('ribbon');
     while (rib.scrollWidth > rib.clientWidth + 2) {
       if (inlineOrder.length <= 1) break;
@@ -634,12 +739,8 @@
 
   /* --------------------------- 顶栏 / 属性面板 --------------------------- */
   function bindTopbar() {
-    /* 顶部样式快捷条（静态部分若存在则绑定；#swStroke 等实际在内联面板中由 toggleRibInline 绑定） */
-    document.querySelectorAll('#swStroke i').forEach((el) =>
-      el.addEventListener('click', () => applyStyle({ stroke: el.dataset.c })));
-    document.querySelectorAll('#swFill button').forEach((el) =>
-      el.addEventListener('click', () => applyStyle({ fill: el.dataset.f })));
-    /* 线样下拉：点空白处 / 滚动 / 按 Esc 收起（全局一次，避免面板反复打开时重复挂载） */
+    /* 顶部样式控件实际在 ribbon 内联面板中，由 toggleRibInline 绑定；此处只挂全局收起逻辑 */
+    /* 线样/色板下拉：点空白处 / 滚动 / 按 Esc 收起（全局一次，避免面板反复打开时重复挂载） */
     document.addEventListener('click', (e) => {
       if (!e.target.closest || !e.target.closest('.sdrop')) closeDrops();
     });
@@ -2095,12 +2196,14 @@
       DP.style.DASHES.map((d) => dashItemHtml(d, s.stroke)), s.dash);
     const widthDrop = styleDropHtml('pWidth', 'width',
       wList.map((w) => widthItemHtml(w, s.stroke)), curW);
+    /* 线色/填充=色板下拉（自动色/标准/自定义/文档已用色 + 其他颜色…），与 ribbon 同源 */
+    const strokeDrop = colorDropHtml('pStrokeDrop', 'stroke');
+    const fillDrop = colorDropHtml('pFillDrop', 'fill');
     const common = `
-      <div class="row"><label>线色</label><input type="color" id="pStroke" value="${s.stroke}"></div>
+      <div class="row"><label>线色</label>${strokeDrop}</div>
       <div class="row"><label>线型</label>${dashDrop}</div>
       <div class="row"><label>线宽</label>${widthDrop}<input type="number" id="pWidthNum" min="0.25" max="24" step="0.25" value="${curW}" title="自定义线宽"></div>
-      <div class="row"><label>填充</label><input type="color" id="pFill" value="${s.fill && s.fill !== 'none' ? s.fill : '#ffffff'}">
-        <button class="mini" id="pFillNone">无</button></div>
+      <div class="row"><label>填充</label>${fillDrop}</div>
       <div class="row"><label>字号</label><input type="number" id="pFontSize" min="8" max="120" value="${s.fontSize || 18}"></div>
     `;
     if (!sel.length) {
@@ -2188,9 +2291,17 @@
       const el = box.querySelector('#' + id);
       if (el) el.addEventListener(ev, fn);
     };
-    on('pStroke', 'input', (e) => apply((o) => { (o.style || st.style).stroke = e.target.value; if (!sel.length) st.style.stroke = e.target.value; }));
-    /* 线型/线宽：线样下拉。收起态在面板重建后补填；选中项直接改对象样式 */
+    /* 色板下拉（线色/填充）：收起态补填 + 选色即改样式；新色进自定义区 */
     const s0 = (sel.length ? sel[0].style : st.style) || st.style;
+    syncColorDrop(box.querySelector('#pStrokeDrop'), s0.stroke);
+    syncColorDrop(box.querySelector('#pFillDrop'), s0.fill || 'none');
+    const pickPropsColor = (key) => (c) => {
+      if (c !== 'none' && addCustomColor(c)) refreshPaletteCustoms();
+      apply((o) => { (o.style || st.style)[key] = c; });
+    };
+    bindColorDrop(box.querySelector('#pStrokeDrop'), pickPropsColor('stroke'));
+    bindColorDrop(box.querySelector('#pFillDrop'), pickPropsColor('fill'));
+    /* 线型/线宽：线样下拉。收起态在面板重建后补填；选中项直接改对象样式 */
     const pDash = box.querySelector('#pDash');
     const pWidth = box.querySelector('#pWidth');
     setDropValue(pDash, s0.dash,
@@ -2213,8 +2324,6 @@
       apply((o) => { (o.style || st.style).width = v; });
       syncWidthPicks(v);
     });
-    on('pFill', 'input', (e) => apply((o) => { (o.style || st.style).fill = e.target.value; }));
-    on('pFillNone', 'click', () => apply((o) => { (o.style || st.style).fill = 'none'; }));
     on('pFontSize', 'change', (e) => {
       const v = +e.target.value;
       apply((o) => { if (o.type === 'text') o.size = v; (o.style || st.style).fontSize = v; });

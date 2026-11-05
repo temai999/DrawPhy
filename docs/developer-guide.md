@@ -144,6 +144,7 @@ if (mod && mod.translate) { mod.translate(o, dx, dy); } else { /* 旧 switch 分
 - **线型**：唯一来源 `src/core/style.js`。模块渲染一律 `DP.style.dashArray(dash)`；UI 是**线样下拉**（`styleDropHtml()` 生成、`bindStyleDrops()` 绑定、`setDropValue()` 同步收起态），每个选项都是真实 dasharray 画的线样，不是文字选项。`dashdot`（点划线）是光学主光轴的教材画法，别改名。
 - **线宽**：预设 `DP.style.WIDTHS`（0.75/1/1.5/2/3/4），同样是线样下拉（线样按真实粗细画 + 数字）；属性面板下拉旁保留窄的「自定义」数值框，非预设值由 `DP.style.normWidth()` 兜底（脏值回落 2，上限 24），并在 `setDropValue()` 里就地补选项。
 - **线样下拉的实现要点**（改 UI 前必读）：原生 `<select>` 的 option 放不了 SVG，所以是自绘下拉。菜单用 `position:fixed` + `placeDropMenu()` 计算坐标——因为 `#ribbon` 是 `overflow-y:hidden`，普通 absolute 菜单会被裁掉；点空白/滚动/Esc 收起的全局监听在 `bindTopbar()` 只挂一次；选项点击用**事件委托**绑在 `.sdrop` 容器上，动态补进去的选项也能用。
+- **线条颜色 / 填充样式 = 色板下拉**（`colorDropHtml()` / `bindColorDrop()` / `syncColorDrop()`）：分区为 自动色 → 标准 → 自定义（localStorage `drawphy.customColors`，选色即存）→ 文档中已使用的颜色（`usedColors()` 扫描对象样式）→ 无填充（仅填充面板）+ 其他颜色…（隐藏原生取色器，**不能 display:none**，否则打不开）。注意：`bindStyleDrops` 的选择器是 `.sdrop:not(.color-drop)`——色板下拉由 `bindColorDrop` 单独绑定，两边都绑会让 toggle 抵消、下拉打不开。
 - **端点粘附**：模块在 `capabilities` 里声明 `bind: true`（line/arrow/ray 已声明），核心与 UI 一律用 `M.isBindable(o)` 判断。**禁止再写 `type === 'line' || type === 'arrow'` 这类硬编码**——光线就是漏改案例。
 
 ## 5. 标准任务手册
