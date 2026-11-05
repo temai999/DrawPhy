@@ -4,10 +4,14 @@
 (function () {
   'use strict';
   const DP = (window.DP = window.DP || {});
-  const U = (DP.ui = {});
+  const U = (DP.ui = DP.ui || {});   /* 保留 ui/tools-data.js 等先行文件已挂载的内容 */
   const st = DP.state;
   const M = DP.model;
   const G = DP.geom;
+  /* 阶段 6.4：工具表 / 帮助文案 / 图形工厂已外移到 src/ui/*.js，这里只留别名与薄包装 */
+  const TOOLS = U.TOOLS || [];
+  const IC = U.IC || ((x) => x);
+  const ICONS = U.ICONS || {};
 
   let board, worldLayer, hintEl, zoomEl, toastEl, textInput;
   let spaceDown = false;
@@ -15,31 +19,6 @@
   U.snapInfo = null;
   const inlineOrder = []; // 已展开面板的打开顺序（key），用于 LRU 收起，不依赖 DOM 位置
 
-  const TOOLS = [
-    { id: 'select', ch: '选', name: '选择', key: 'V', g: 'shape', hint: '点选 / 框选；拖动移动；Shift 加选' },
-    { id: 'line', ch: '线', name: '线段', key: 'L', g: 'shape', hint: '拖动绘制线段；Shift 锁 15°' },
-    { id: 'arrow', ch: '箭', name: '箭头', key: 'A', g: 'shape', hint: '拖动绘制带箭头的线（力、光路）' },
-    { id: 'darrow', ch: '双', name: '双箭头', key: 'W', g: 'shape', hint: '拖动绘制双向箭头（标注位移、等长）' },
-    { id: 'polyline', ch: '折', name: '折线', key: 'P', g: 'shape', hint: '逐点单击；双击或回车结束' },
-    { id: 'polygon', ch: '多', name: '多边形', key: 'G', g: 'shape', hint: '逐点单击；双击闭合并结束' },
-    { id: 'rect', ch: '矩', name: '矩形', key: 'R', g: 'shape', hint: '拖动画矩形；Shift 正方形' },
-    { id: 'ellipse', ch: '椭', name: '椭圆', key: 'E', g: 'shape', hint: '拖动画椭圆；Shift 正圆' },
-    { id: 'circle', ch: '圆', name: '圆', key: 'C', g: 'shape', hint: '以按下点为圆心拖动定半径' },
-    { id: 'arc', ch: '弧', name: '圆弧', key: 'U', g: 'shape', hint: '单击定圆心 → 定起点 → 定终点' },
-    { id: 'freehand', ch: '徒', name: '徒手', key: 'F', g: 'shape', hint: '按住拖动自由绘制（自动平滑）' },
-    { id: 'bezier', ch: '贝', name: '贝塞尔', key: 'J', g: 'shape', hint: '单击：起点 → 控制点 → 终点；Esc 取消' },
-    { id: 'point', ch: '点', name: '点', key: 'O', g: 'shape', hint: '单击放置点；可被吸附和连线' },
-    { id: 'roundrect', ch: '圆', name: '圆角矩形', key: 'D', g: 'shape', hint: '拖动画圆角矩形；Shift 正方形' },
-    { id: 'func', ch: '函', name: '函数图像', key: 'H', g: 'shape', hint: '拖框定区域，输入解析式如 sin(x)、x^2' },
-    { id: 'textbox', ch: '框', name: '文本框', key: 'Q', g: 'text', hint: '单击落文本框；双击改字' },
-    { id: 'callout', ch: '注', name: '标注', key: 'Z', g: 'text', hint: '先点标注指向处，再点文本框位置' },
-    { id: 'text', ch: '文', name: '文字', key: 'T', g: 'text', hint: '单击落字；支持 x^{2}、A_{1}' },
-    { id: 'dim', ch: '尺', name: '尺寸', key: 'M', g: 'text', hint: '单击两点生成尺寸线' },
-    { id: 'angle', ch: '角', name: '角度', key: 'N', g: 'text', hint: '单击顶点 → 边1 → 边2' },
-    { id: 'trim', ch: '剪', name: '修剪', key: 'X', g: 'edit', hint: '单击线段上要剪掉的部分' },
-    { id: 'eraser', ch: '擦', name: '橡皮', key: 'K', g: 'edit', hint: '按住拖过对象即删除' },
-    { id: 'fill', ch: '漆', name: '填充', key: 'B', g: 'edit', hint: '单击封闭图形填充当前颜色' },
-  ];
 
   /* ------------------------------ 初始化 ------------------------------ */
   U.init = function () {
@@ -83,34 +62,6 @@
   };
 
   /* 工具图标：统一 24×24、描边 currentColor，细线（明显比分类小组图标更细） */
-  const IC = (inner) => `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
-  const ICONS = {
-    select: `<path d="M6 4 L6 17 L9.5 13.5 L12 19.5 L14.5 18.5 L12 12.5 L17 12.5 Z" fill="currentColor" stroke="none"/>`,
-    line: `<line x1="4" y1="20" x2="20" y2="4"/>`,
-    arrow: `<line x1="4" y1="19" x2="17" y2="6"/><path d="M17 6 L10 7 L15 12 Z" fill="currentColor" stroke="none"/>`,
-    darrow: `<line x1="5" y1="12" x2="19" y2="12"/><path d="M5 12 L11 9.5 L11 14.5 Z" fill="currentColor" stroke="none"/><path d="M19 12 L13 9.5 L13 14.5 Z" fill="currentColor" stroke="none"/>`,
-    polyline: `<polyline points="4,17 9,9 14,14 20,6"/>`,
-    polygon: `<path d="M12 5 L20 19 L4 19 Z"/>`,
-    rect: `<rect x="5" y="7" width="14" height="10" rx="1"/>`,
-    ellipse: `<ellipse cx="12" cy="12" rx="8" ry="5.5"/>`,
-    circle: `<circle cx="12" cy="12" r="7"/>`,
-    arc: `<path d="M6 18 A 8 8 0 0 1 18 6"/>`,
-    freehand: `<path d="M4 15 Q 8 7 12 12 T 20 10"/>`,
-    bezier: `<path d="M4 19 Q 11 3 20 7"/><circle cx="4" cy="19" r="1.5"/><circle cx="20" cy="7" r="1.5"/><path d="M4 19 L11 11 L20 7" stroke-dasharray="2 2"/>`,
-    point: `<circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>`,
-    roundrect: `<rect x="4" y="7" width="16" height="10" rx="4"/>`,
-    func: `<path d="M3 17 Q 8 4 12 12 T 21 7"/><line x1="3" y1="20" x2="21" y2="20" stroke-dasharray="2 2"/>`,
-    textbox: `<rect x="5" y="6" width="14" height="12" rx="2"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="13" x2="14" y2="13"/>`,
-    callout: `<path d="M4 20 L10 12"/><rect x="10" y="3" width="11" height="8" rx="1.5"/><circle cx="4" cy="20" r="1.4"/>`,
-    text: `<path d="M7 6 h10 M12 6 v13"/>`,
-    dim: `<line x1="6" y1="5" x2="6" y2="19"/><line x1="18" y1="5" x2="18" y2="19"/><line x1="6" y1="12" x2="18" y2="12"/><path d="M6 12 L9 10.5 L9 13.5 Z" fill="currentColor" stroke="none"/><path d="M18 12 L15 10.5 L15 13.5 Z" fill="currentColor" stroke="none"/>`,
-    angle: `<line x1="6" y1="19" x2="6" y2="6"/><line x1="6" y1="19" x2="18" y2="19"/><path d="M10 19 A 4 4 0 0 0 8.8 15"/>`,
-    trim: `<line x1="5" y1="19" x2="19" y2="5"/><circle cx="8" cy="16" r="1.8"/><circle cx="16" cy="8" r="1.8"/>`,
-    eraser: `<path d="M6 14 L12 8 L19 15 L13 21 H7 Z"/><line x1="4" y1="22" x2="20" y2="22"/>`,
-    fill: `<path d="M9 4 h6 l2.5 9 h-11 Z"/><line x1="12" y1="13" x2="12" y2="16"/><path d="M12 17 c-2 2.5 -2 4.5 0 5.5 c2 -1 2 -3 0 -5.5"/>`,
-  };
-
-  /* 绘图 tab 已改为竖排分类按钮（index.html 静态结构），点击由通用 [data-cat] 绑定处理 */
   function buildTools() {}
 
   /* 统一应用样式：全局默认 + 选中对象 */
@@ -604,25 +555,7 @@
      旧 aside 速查表已删除（原表 M=标注 为错记，且漏 J/O/D/H/Q/Z），
      本面板自动与 TOOLS 保持一致。 */
   let helpPanelEl = null;
-  function buildHelpHtml() {
-    const kbd = (k) => `<kbd>${k}</kbd>`;
-    const rowOf = (g) => TOOLS.filter((t) => t.g === g).map((t) => `${kbd(t.key)} ${t.name}`).join('　');
-    return [
-      `<div class="props-sub">绘图</div>`,
-      `<div class="keys"><div>${rowOf('shape')}</div></div>`,
-      `<div class="props-sub">文字与标注</div>`,
-      `<div class="keys"><div>${rowOf('text')}</div></div>`,
-      `<div class="props-sub">编辑</div>`,
-      `<div class="keys"><div>${rowOf('edit')}</div></div>`,
-      `<div class="props-sub">通用</div>`,
-      `<div class="keys">
-        <div>${kbd('Ctrl+Z')} 撤销 ${kbd('Ctrl+Y')} 重做 ${kbd('Ctrl+S')} 保存 ${kbd('Ctrl+D')} 原地复制 ${kbd('Del')} 删除</div>
-        <div>${kbd('Ctrl+A')} 全选 ${kbd('Ctrl+C')} / ${kbd('Ctrl+V')} 复制粘贴 ${kbd('Ctrl+G')} 组合 ${kbd('Ctrl+Shift+G')} 取消组合</div>
-        <div>${kbd('Ctrl+0')} 适应画布 · 滚轮缩放 · ${kbd('空格')}+拖 平移 · ${kbd('S')} 部件抽屉 · 右键 快捷菜单</div>
-        <div>${kbd('Alt')}+拖 拖动复制 · ${kbd('Shift')}+拖 锁轴向</div>
-      </div>`,
-    ].join('');
-  }
+  function buildHelpHtml() { return U.helpHtml ? U.helpHtml() : ''; }
   function closeHelp() {
     if (helpPanelEl) { helpPanelEl.remove(); helpPanelEl = null; }
   }
@@ -1589,85 +1522,11 @@
   }
 
   /* 阶段 2：rect / arrow 由 registry 模块工厂生成，旧 switch 仅作兜底 */
-  function moduleShapeFrom(tool, a, b, stl, shift) {
-    const type = tool === 'darrow' ? 'arrow' : tool === 'roundrect' ? 'rect' : tool;
-    const mod = DP.registry && DP.registry.get ? DP.registry.get(type) : null;
-    if (!mod || typeof mod.defaults !== 'function') return null;
-    if (type === 'rect') {
-      let w = b.x - a.x, h = b.y - a.y;
-      if (shift) {
-        const m = Math.max(Math.abs(w), Math.abs(h));
-        w = Math.sign(w || 1) * m;
-        h = Math.sign(h || 1) * m;
-      }
-      const rx = tool === 'roundrect' ? Math.min(12, Math.abs(w) / 4, Math.abs(h) / 4) : 0;
-      return Object.assign(mod.defaults({
-        x: Math.min(a.x, a.x + w), y: Math.min(a.y, a.y + h),
-        w: Math.abs(w), h: Math.abs(h), rx,
-        style: stl,
-      }), { type: mod.type });
-    }
-    if (type === 'arrow') {
-      return Object.assign(mod.defaults({
-        x1: a.x, y1: a.y, x2: b.x, y2: b.y,
-        style: Object.assign({}, stl, { arrow: tool === 'darrow' ? 'both' : 'end' }),
-      }), { type: mod.type });
-    }
-    if (type === 'line') {
-      return Object.assign(mod.defaults({
-        x1: a.x, y1: a.y, x2: b.x, y2: b.y,
-        style: stl,
-      }), { type: mod.type });
-    }
-    if (type === 'circle') {
-      return Object.assign(mod.defaults({
-        cx: a.x, cy: a.y, r: Math.max(1, G.dist(a, b)),
-        style: stl,
-      }), { type: mod.type });
-    }
-    if (type === 'ellipse') {
-      let rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2;
-      if (shift) { rx = ry = Math.max(rx, ry); }
-      return Object.assign(mod.defaults({
-        cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, rx, ry,
-        style: stl,
-      }), { type: mod.type });
-    }
-    return null;
-  }
+  /* 图形工厂见 src/ui/shapes.js（纯函数） */
+  function moduleShapeFrom(tool, a, b, stl, shift) { return DP.shape.moduleFrom(tool, a, b, stl, shift); }
+  function shapeFrom(tool, a, b, pts, stl, shift) { return DP.shape.from(tool, a, b, pts, stl, shift); }
+  function simplifyPts(pts) { return DP.shape.simplifyPts(pts); }
 
-  function shapeFrom(tool, a, b, pts, stl, shift) {
-    const fromModule = moduleShapeFrom(tool, a, b, stl, shift);
-    if (fromModule) return fromModule;
-    switch (tool) {
-      case 'line': return { type: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y, style: stl };
-      case 'arrow': return { type: 'arrow', x1: a.x, y1: a.y, x2: b.x, y2: b.y, style: Object.assign({}, stl, { arrow: 'end' }) };
-      case 'darrow': return { type: 'arrow', x1: a.x, y1: a.y, x2: b.x, y2: b.y, style: Object.assign({}, stl, { arrow: 'both' }) };
-      case 'rect': {
-        let w = b.x - a.x, h = b.y - a.y;
-        if (shift) { const m = Math.max(Math.abs(w), Math.abs(h)); w = Math.sign(w || 1) * m; h = Math.sign(h || 1) * m; }
-        return { type: 'rect', x: Math.min(a.x, a.x + w), y: Math.min(a.y, a.y + h), w: Math.abs(w), h: Math.abs(h), rx: 0, style: stl };
-      }
-      case 'roundrect': {
-        let w = b.x - a.x, h = b.y - a.y;
-        if (shift) { const m = Math.max(Math.abs(w), Math.abs(h)); w = Math.sign(w || 1) * m; h = Math.sign(h || 1) * m; }
-        const rx = Math.min(12, Math.abs(w) / 4, Math.abs(h) / 4);
-        return { type: 'rect', x: Math.min(a.x, a.x + w), y: Math.min(a.y, a.y + h), w: Math.abs(w), h: Math.abs(h), rx, style: stl };
-      }
-      case 'ellipse': {
-        let rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2;
-        if (shift) { rx = ry = Math.max(rx, ry); }
-        return { type: 'ellipse', cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, rx, ry, style: stl };
-      }
-      case 'circle': return { type: 'circle', cx: a.x, cy: a.y, r: Math.max(1, G.dist(a, b)), style: stl };
-      case 'freehand': {
-        return { type: 'polyline', points: simplifyPts(pts), closed: false, style: stl };
-      }
-      default: return null;
-    }
-  }
-
-  /* 函数图像：拖框定区域，输入解析式，采样生成折线 */
   function createFunction(a, b) {
     const expr = window.prompt('输入函数解析式（变量用 x），例如：sin(x)、x^2、sqrt(x)、exp(-x)*cos(x)', 'sin(x)');
     if (!expr) { afterChange(); return; }
@@ -1728,24 +1587,6 @@
   }
 
   /* 手绘折线抽稀（Ramer–Douglas–Peucker） */
-  function simplifyPts(pts) {
-    if (pts.length <= 3) return pts;
-    const tol = 1.6;
-    const keep = [pts[0]];
-    const rec = (i, j) => {
-      let maxD = 0, idx = -1;
-      const a = { x: pts[i][0], y: pts[i][1] }, b = { x: pts[j][0], y: pts[j][1] };
-      for (let k = i + 1; k < j; k++) {
-        const d = G.distToSeg({ x: pts[k][0], y: pts[k][1] }, a, b);
-        if (d > maxD) { maxD = d; idx = k; }
-      }
-      if (maxD > tol && idx > -1) { rec(i, idx); keep.push(pts[idx]); rec(idx, j); }
-    };
-    rec(0, pts.length - 1);
-    keep.push(pts[pts.length - 1]);
-    return keep;
-  }
-
   function restoreGeom(target, src) {
     const keep = ['id', 'style', 'group', 'partId'];
     for (const k of Object.keys(target)) if (!keep.includes(k)) delete target[k];

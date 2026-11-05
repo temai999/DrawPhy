@@ -50,6 +50,10 @@
 
 ## 阶段 6：命令式历史 + ui.js 切分（2-3 周，架构天花板）
 
+**状态：已完成（2026-11-05）** — 6.1~6.3 全部落地，6.4 采用「纯逻辑优先外移」：
+已拆出 `ui/tools-data.js`、`ui/help.js`、`ui/shapes.js`；指针状态机保持内聚（见 dev-progress 阶段 6 说明）。
+历史实现：差分补丁 + 200 步上限；基准 800 对象 50 步 0.45ms/步、历史占用 27KB（旧 8.4MB）。
+
 **目标**：用命令对象替代全量 JSON 快照，彻底解决 80 步上限与每步 O(n) 序列化；顺手把 ui.js 按职责切成 4 个文件。
 
 **涉及文件**：改 `core.js`（DP.history 重写）、`src/ui.js` 拆分为 `src/ui/{tools,pointer,text-edit,panels}.js`（全部挂 `DP.ui`）、`eventbus.js` 启用；index.html 与测试页脚本块更新。

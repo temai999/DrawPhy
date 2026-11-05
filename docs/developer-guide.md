@@ -198,6 +198,8 @@ if (mod && mod.translate) { mod.translate(o, dx, dy); } else { /* 旧 switch 分
 | 用 `===` 断言浮点 | 真实失败案例 |
 | 测试页新变量与旧 `const` 重名 | 整页崩溃案例 |
 | 正则批量替换 `src` 里单词级符号 | 真实事故：`xmlns` 被误改 |
+| 多文件挂同一命名空间时写 `DP.ui = {}` | 真实事故：阶段 6 拆分后 ui.js 覆盖了 `ui/tools-data.js` 已挂的 `U.TOOLS`，工具栏全空；必须写 `DP.ui = DP.ui || {}` |
+| 用 Git Bash heredoc 传含 `\n` 的 Python 脚本 | 真实事故：MSYS2 把 `\n` 篡改成 `/n`，字符串匹配静默失配；脚本先用 Write 落盘成 .py 再执行，或用 `chr(10)` |
 | 在 `render` 返回里拼接未转义的用户文本 | XSS/截断，必须 `R.escape` |
 | 修改吸附引擎（`S.resolve/collectPoints/intersections`） | 13 个模块的行为都依赖它，冻结 |
 | 未经 afterChange/push 直接改 objects | 撤销栈漏项 |
@@ -311,3 +313,31 @@ for f in $(find src -name "*.js"); do node --check "$f" || echo "SYNTAX FAIL $f"
 8. 新断言里浮点直接 `===` → 随机性失败。
 9. 改 registry 校验逻辑导致旧模块注册 throw → 全站白屏。registry 是地基，改动要全员回归。
 10. 忘了 `version +1` → 你的修改被「低版本忽略」静默吞掉，debug 两小时。
+
+---
+
+## 11. 历史子系统（阶段 6 重写后）—— 改动前必读
+
+### 结构
+`DP.history` 存**差分补丁**，不存全量快照：
+
+```js
+{ label, before: { order|null, objs: {id: json|null}, groups: json },
+          after:  { order|null, objs: {id: json|null}, groups: json }, t }
+```
+
+- `objs[id] === null` 表示该状态下此对象不存在；`order === null` 表示顺序未变（回放沿用当前顺序）。
+- `stack[0]` 是哨兵（`label:'init'`），`idx` 指向当前状态。
+
+### API 与语义（和旧实现一致，别改）
+| 方法 | 语义 |
+| --- | --- |
+| `push(label?, window?)` | **提交当前已发生的状态**（懒提交）：UI 里通常是「操作开始前 / 操作结束后」各调一次，未变化时自动去重不增长栈 |
+| `undo() / redo()` | 回退/前进一格，会清空选择集 |
+| `reset()` | 新建文档用：栈重置为哨兵 |
+| `pop()` | 回滚最后一次提交（如「填充失败」）；**不要再写 `stack.pop()`** |
+
+### 三条铁律
+1. 任何会改动 `DP.state.objects` / `groups` 的路径，改完必须让某个 `push()` 提交到——否则这一步撤销不到。
+2. `push(label, window)` 的 label 只用于「连续同类操作合并」（样式取样、方向键微移）。**不要给独立手势加同一 label**，否则两次不同拖动会被合成一步。
+3. 改历史实现前后，**必须先跑 `_check/history.html`**（23 项：逐步 undo/redo 深比较 + 栈上限 + 合并 + pop + 800 对象基准）。它是这个子系统的安全网。
