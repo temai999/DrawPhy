@@ -1042,8 +1042,9 @@
                 fill="${bound ? '#ff9f0a' : '#ffffff'}" stroke="#0a84ff" stroke-width="${G.round(1.3 / k)}"/>`;
             }
           }
-          /* 旋转手柄（部件/文字/任意角对象通用） */
-          if (objs.length === 1 && M.rotatable(objs[0])) {
+          /* 旋转手柄（部件/文字/任意角对象通用；多选 = 组旋转，绕选区中心） */
+          const rotSingle = objs.length === 1 && M.rotatable(objs[0]);
+          if (rotSingle || objs.length > 1) {
             const cx = G.round(bb.x + bb.w / 2);
             const top = G.round(bb.y - 26 / k);
             s += `<line x1="${cx}" y1="${G.round(bb.y)}" x2="${cx}" y2="${top}" stroke="#0a84ff" stroke-width="${G.round(1 / k)}"/>`;
@@ -1194,8 +1195,9 @@
       }
       if (bestN) return { kind: 'node', key: bestN.key, ctrl: bestN.kind === 'ctrl', bb };
     }
-    /* 旋转手柄：单个可旋转对象（part/text 用既有 rot；其余 rotation/几何 rotate） */
-    if (objs.length === 1 && M.rotatable(objs[0])) {
+    /* 旋转手柄：单个可旋转对象（part/text 用既有 rot；其余 rotation/几何 rotate）；
+       多选 = 组旋转（圆/点等对称对象随组平移跟随，也允许） */
+    if (objs.length === 1 ? M.rotatable(objs[0]) : objs.length > 1) {
       const cx = bb.x + bb.w / 2, cy = bb.y - 26 / st.view.k;
       if (Math.hypot(p.x - cx, p.y - cy) <= tol) {
         return { kind: 'rot', bb, cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2 };
@@ -1263,9 +1265,11 @@
         return;
       }
       if (h && h.kind === 'rot') {
-        const obj = DP.sel.list()[0];
+        const objs = DP.sel.list();
         const a0 = G.deg(Math.atan2(p0.y - h.cy, p0.x - h.cx));
-        D = { mode: 'rotate', obj, cx: h.cx, cy: h.cy, a0, rot0: M.rotOf(obj), lastRot: M.rotOf(obj), moved: false };
+        /* 单选：绕对象自身中心；多选：组旋转，各对象绕选区中心（D.cx/cy）刚体转 */
+        const rot0 = objs.length === 1 ? M.rotOf(objs[0]) : 0;
+        D = { mode: 'rotate', objs, cx: h.cx, cy: h.cy, a0, rot0, lastRot: rot0, moved: false };
         cap(e);
         return;
       }
@@ -1777,7 +1781,12 @@
       if (e.shiftKey) rot = Math.round(rot / 15) * 15;
       rot = ((Math.round(rot * 10) / 10) % 360 + 360) % 360;
       const delta = rot - D.lastRot;
-      if (delta) M.rotateObj(D.obj, G.rad(delta));
+      if (delta) {
+        const rad = G.rad(delta);
+        const pivot = { x: D.cx, y: D.cy };
+        if (D.objs.length === 1) M.rotateObj(D.objs[0], rad);
+        else D.objs.forEach((o) => M.rotateAround(o, pivot, rad));
+      }
       D.lastRot = rot;
       D.moved = true;
       D.badge = { x: p.x + 14 / st.view.k, y: p.y - 10 / st.view.k, text: `${Math.round(rot)}°` };
@@ -2599,13 +2608,17 @@
     const sel = DP.sel.list();
     if (!sel.length) return;
     DP.history.push();
-    let unsupported = false;
-    for (const o of sel) {
-      if (M.rotatable(o)) M.rotateObj(o, G.rad(delta));
-      else unsupported = true;
+    if (sel.length === 1) {
+      /* 单选：绕对象自身中心（点/圆旋转对称，提示后跳过） */
+      if (M.rotatable(sel[0])) M.rotateObj(sel[0], G.rad(delta));
+      else { afterChange(); U.toast('点、圆不支持旋转'); return; }
+    } else {
+      /* 多选：组旋转 —— 各对象绕选区中心刚体转（圆/点跟随平移） */
+      const bb = M.bbox(sel);
+      const pivot = { x: bb.x + bb.w / 2, y: bb.y + bb.h / 2 };
+      sel.forEach((o) => M.rotateAround(o, pivot, G.rad(delta)));
     }
     afterChange();
-    if (unsupported) U.toast('点、圆不支持旋转（其余对象已旋转）');
   };
 
   U.align = function (mode) {
@@ -2744,7 +2757,8 @@
         const tHtml = terms.length
           ? `<div class="props-sub">端子（${terms.length}）</div><p class="tip">${terms.map((t) => t.label || t.id).join(' · ')}</p>`
           : '';
-        extra = `<div class="row"><label>旋转</label>
+        /* 追加而非覆盖：保留上方 rotatable 分支生成的任意角数值输入（pRotDeg） */
+        extra += `<div class="row"><label>快捷</label>
           <button class="mini" data-rot="-90">-90°</button><button class="mini" data-rot="90">+90°</button>
           <button class="mini" data-flip="1">翻转</button></div>${tHtml}`;
       }

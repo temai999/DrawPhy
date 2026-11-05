@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>rot probe</title>
+<link rel="stylesheet" href="../assets/editor.css">
+<style>
+  body { margin: 0; }
+  #board { position: absolute; left: 0; top: 0; width: 900px; height: 600px; }
+  #props { position: absolute; left: 910px; top: 0; width: 240px; }
+</style>
+</head>
+<body>
+<svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+<input id="inlineText" class="inline-text" hidden>
+<div id="toast"></div><div id="hint"></div><span id="zoomLabel"></span>
+<div id="toolList"></div>
+<div id="partDrawer" class="open"><div class="drawer-head"><input id="partSearch"></div><div class="drawer-body"><nav id="drawerCats"></nav><div id="drawerGrid"></div></div></div>
+<div id="drawerMask"></div>
+<button id="btnParts"></button><button id="drawerClose"></button>
+<div id="props"></div>
+<button id="btnUndo"></button><button id="btnRedo"></button><button id="btnFit"></button>
+<button id="btnNew"></button><button id="btnOpen"></button><button id="btnSave"></button>
+<button id="btnPng"></button><button id="btnSvg"></button><button id="btnCopy"></button>
+<input type="checkbox" id="bgToggle" checked><input type="checkbox" id="snapToggle" checked>
+<input type="file" id="fileInput" hidden>
+<script>
+  window.__probeStage = 1;
+</script>
+<script src="../src/core/config.js"></script>
+<script src="../src/core/style.js"></script>
+<script src="../src/core/module-wrap.js"></script>
+<script src="../src/core/registry.js"></script>
+<script src="../src/core/eventbus.js"></script>
+<script src="../src/core.js"></script>
+<script src="../src/modules/primitives/rect.js"></script>
+<script src="../src/modules/primitives/arrow.js"></script>
+<script src="../src/modules/primitives/line.js"></script>
+<script src="../src/modules/primitives/circle.js"></script>
+<script src="../src/modules/primitives/ellipse.js"></script>
+<script src="../src/modules/primitives/polyline.js"></script>
+<script src="../src/modules/primitives/arc.js"></script>
+<script src="../src/modules/primitives/path.js"></script>
+<script src="../src/modules/primitives/text.js"></script>
+<script src="../src/modules/primitives/textbox.js"></script>
+<script src="../src/modules/primitives/callout.js"></script>
+<script src="../src/modules/primitives/dim.js"></script>
+<script src="../src/modules/primitives/angle.js"></script>
+<script src="../src/modules/host/part.js"></script>
+<script src="../src/modules/host/point.js"></script>
+<script src="../src/parts.js"></script>
+<script src="../src/render.js"></script>
+<script src="../src/ui/tools-data.js"></script>
+<script src="../src/ui/help.js"></script>
+<script src="../src/ui/shapes.js"></script>
+<script src="../src/ui.js"></script>
+<script src="../src/io.js"></script>
+<script>
+(function () {
+  try { localStorage.clear(); } catch (e) {}
+  DP.state.view = { x: 0, y: 0, k: 1 };
+  DP.state.page = { w: 900, h: 600, bg: '#fff', grid: false };
+  DP.state.snap = { grid: false, gridSize: 20, anchors: false };
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  DP.ui.init();
+  DP.state.view = { x: 0, y: 0, k: 1 };
+
+  /* 场景：物块 + 斜面 + 力箭头 多选 → 组旋转 30°，显示组旋转柄 */
+  function part(pid, x, y, rot) {
+    return { id: 'p_' + pid, type: 'part', partId: pid, x: x, y: y, s: 1, rot: rot || 0, flip: false, style: Object.assign({}, DP.state.style) };
+  }
+  DP.state.objects.push(
+    part('incline', 120, 300),
+    part('block', 210, 280, 32),
+    part('forceArrow', 260, 400, -32)
+  );
+  DP.state.selection = new Set(DP.state.objects.map((o) => o.id));
+  DP.ui.setTool('select');
+  DP.ui.render();
+  /* 组旋转 30°：U.rotate 需要任意角 → 直接用 M.rotateAround 模拟拖柄效果 */
+  const bb = DP.model.bbox(DP.state.objects);
+  DP.state.objects.forEach((o) => DP.model.rotateAround(o, { x: bb.x + bb.w / 2, y: bb.y + bb.h / 2 }, DP.geom.rad(30)));
+  DP.ui.render();
+  document.title = 'PROBE OK rotHandles=' + (document.getElementById('board').innerHTML.match(/stroke="#0a84ff"/g) || []).length;
+})();
+</script>
+</body>
+</html>

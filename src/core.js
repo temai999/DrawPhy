@@ -998,6 +998,22 @@
     }
     o.rotation = (((o.rotation || 0) + G.deg(rad)) % 360 + 360) % 360;
   };
+  /* 绕任意点 pivot 刚体旋转 rad（多选组旋转用）：
+   * 1) 记下旋转前中心 c0；2) rotateObj 自转（各模块绕自己的圆心，弧/圆心≠bbox 中心）；
+   * 3) 求自转后的新中心 c0'（弧这类"绕圆心转"的对象 bbox 中心会漂）；
+   * 4) 把对象平移到 c0 绕 pivot 旋转后的位置 —— 合成效果 = 刚体绕 pivot 转。
+   * 不可旋转对象（circle/point）跳过自转，退化为跟随平移，随组整体转动。 */
+  M.rotateAround = function (o, pivot, rad) {
+    if (!o || !rad) return;
+    const c0 = M.rotCenter(o);
+    if (M.rotatable(o)) M.rotateObj(o, rad);
+    const c0p = M.rotCenter(o);
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    const dx = c0.x - pivot.x, dy = c0.y - pivot.y;
+    const c1 = { x: pivot.x + dx * cos - dy * sin, y: pivot.y + dx * sin + dy * cos };
+    const tx = c1.x - c0p.x, ty = c1.y - c0p.y;
+    if (tx || ty) M.translateObj(o, tx, ty);
+  };
 
   /* --------------------------- 对象变换原语 --------------------------- */
   M.translateObj = function (o, dx, dy) {

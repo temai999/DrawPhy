@@ -724,6 +724,61 @@
       T.rotateObj(pt, Math.PI / 6);
       ok('旋转：text 沿用 rot 字段', Math.abs(pt.rot - 60) < 0.01 && pt.rotation === undefined, pt.rot);
     })();
+
+    /* ---- 组旋转（M.rotateAround：绕任意点刚体旋转，多选旋转柄用） ---- */
+    (function () {
+      const T = DP.model;
+      const PV = { x: 0, y: 0 };
+
+      /* 几何法 line：绕 pivot 90°，(x,y)→(−y,x)，线段 (100,0)-(200,0) → (0,100)-(0,200) */
+      const ln = { type: 'line', x1: 100, y1: 0, x2: 200, y2: 0, style: {} };
+      T.rotateAround(ln, PV, Math.PI / 2);
+      ok('组旋转：line 绕外部点 90°', Math.abs(ln.x1) < 0.01 && Math.abs(ln.y1 - 100) < 0.01 &&
+        Math.abs(ln.x2) < 0.01 && Math.abs(ln.y2 - 200) < 0.01,
+        ln.x1 + ',' + ln.y1 + ' ~ ' + ln.x2 + ',' + ln.y2);
+
+      /* arc 自转绕圆心（≠bbox 中心）：检验中心补偿，圆心应绕 pivot 转到 (0,100) */
+      const arc = { type: 'arc', cx: 100, cy: 0, r: 40, a0: 0, a1: 90, style: {} };
+      T.rotateAround(arc, PV, Math.PI / 2);
+      ok('组旋转：arc 圆心绕 pivot 转 + 角度平移',
+        Math.abs(arc.cx) < 0.01 && Math.abs(arc.cy - 100) < 0.01 && Math.abs(arc.a0 - 90) < 0.01 && Math.abs(arc.a1 - 180) < 0.01,
+        'c=' + arc.cx + ',' + arc.cy + ' a=' + arc.a0 + '~' + arc.a1);
+
+      /* 字段法 rect：rotation 记角度 + 平移补偿，包络中心绕 pivot 转 */
+      const rc = { type: 'rect', x: 0, y: 0, w: 100, h: 50, style: {} };
+      T.rotateAround(rc, PV, Math.PI / 2);
+      ok('组旋转：rect 字段法平移补偿',
+        Math.abs(rc.rotation - 90) < 0.01 && Math.abs(rc.x + 75) < 0.01 && Math.abs(rc.y - 25) < 0.01,
+        'rot=' + rc.rotation + ' xy=' + rc.x + ',' + rc.y);
+      const cenv = T.localBBox(rc);
+      const ccx = cenv.x + cenv.w / 2, ccy = cenv.y + cenv.h / 2;
+      ok('组旋转：rect 包络中心落在绕 pivot 旋转点', Math.abs(ccx + 25) < 0.01 && Math.abs(ccy - 50) < 0.01,
+        ccx + ',' + ccy);
+
+      /* circle 不可自转：退化为跟随平移（圆心绕 pivot 转） */
+      const cir = { type: 'circle', cx: 100, cy: 0, r: 20, style: {} };
+      T.rotateAround(cir, PV, Math.PI / 2);
+      ok('组旋转：circle 跟随平移', Math.abs(cir.cx) < 0.01 && Math.abs(cir.cy - 100) < 0.01 && Math.abs(cir.r - 20) < 0.01,
+        cir.cx + ',' + cir.cy);
+
+      /* part：rot 记角度 + 几何中心绕 pivot 转（resistor 64×28，中心 (132,14)→(−14,132)） */
+      const pa = { type: 'part', x: 100, y: 0, partId: 'resistor', s: 1, rot: 0, flip: false };
+      T.rotateAround(pa, PV, Math.PI / 2);
+      const pdef = DP.parts.byId.resistor;
+      const pcx = pa.x + pdef.w / 2, pcy = pa.y + pdef.h / 2;
+      ok('组旋转：part 中心绕 pivot 转',
+        Math.abs(pa.rot - 90) < 0.01 && Math.abs(pcx + 14) < 0.01 && Math.abs(pcy - 132) < 0.01,
+        'rot=' + pa.rot + ' c=' + pcx + ',' + pcy);
+
+      /* 刚体守恒：两点间距离旋转前后不变 */
+      const a2 = { type: 'circle', cx: 300, cy: 40, r: 5, style: {} };
+      const b2 = { type: 'circle', cx: 340, cy: 10, r: 5, style: {} };
+      const d0 = Math.hypot(a2.cx - b2.cx, a2.cy - b2.cy);
+      T.rotateAround(a2, PV, Math.PI / 5);
+      T.rotateAround(b2, PV, Math.PI / 5);
+      const d1 = Math.hypot(a2.cx - b2.cx, a2.cy - b2.cy);
+      ok('组旋转：刚体距离守恒', Math.abs(d0 - d1) < 0.01, d0 + '→' + d1);
+    })();
   } catch (e) {
     ok('运行异常', false, e && e.message);
   }

@@ -664,6 +664,61 @@
     DP.ui.render();
   })();
 
+  /* ---------- 21. 多选组旋转 + 部件面板任意角输入（阶段 8-d 补全） ---------- */
+  (function () {
+    DP.state.objects = [];
+    DP.state.selection = new Set();
+    DP.state.objects.push(
+      { id: 'grpR', type: 'rect', x: 100, y: 100, w: 80, h: 40, style: Object.assign({}, DP.state.style) },
+      { id: 'grpC', type: 'circle', cx: 300, cy: 120, r: 30, style: Object.assign({}, DP.state.style) }
+    );
+    DP.state.selection = new Set(['grpR', 'grpC']);
+    DP.ui.setTool('select');
+    DP.ui.render();
+    DP.history.push(); /* 检查点：撤销应回到这里（对象存在、未旋转），而非删除对象 */
+    const svg21a = document.getElementById('board').innerHTML;
+    t('组旋转：多选时画旋转柄', /<circle[^>]*stroke="#0a84ff"/.test(svg21a), '');
+    /* 选区 bbox (100,90)-(330,150)，中心 (215,120)，柄在 (215,64)；拖到正右方 (241,120) = +90° */
+    drag(215, 64, 241, 120);
+    const gr21 = DP.state.objects.find((o) => o.id === 'grpR');
+    const gc21 = DP.state.objects.find((o) => o.id === 'grpC');
+    t('组旋转：rect 记 rotation=90', Math.abs((gr21.rotation || 0) - 90) < 0.6, gr21.rotation);
+    t('组旋转：circle 圆心绕选区中心转', Math.abs(gc21.cx - 215) < 0.6 && Math.abs(gc21.cy - 205) < 0.6, gc21.cx + ',' + gc21.cy);
+    const gb21 = DP.model.localBBox(gr21);
+    t('组旋转：rect 包络中心绕 pivot 转',
+      Math.abs(gb21.x + gb21.w / 2 - 215) < 0.6 && Math.abs(gb21.y + gb21.h / 2 - 45) < 0.6,
+      (gb21.x + gb21.w / 2) + ',' + (gb21.y + gb21.h / 2));
+    /* 菜单「旋转90°」多选 = 再组旋转 90°（rect rotation 累加到 180） */
+    DP.ui.rotate(90);
+    t('组旋转：U.rotate 多选为组旋转', Math.abs((gr21.rotation % 360) - 180) < 0.6, gr21.rotation);
+    /* 撤销两步还原 */
+    DP.history.undo();
+    DP.history.undo();
+    const gr21b = DP.state.objects.find((o) => o.id === 'grpR');
+    const gc21b = DP.state.objects.find((o) => o.id === 'grpC');
+    t('组旋转：撤销还原', gr21b && gr21b.rotation === undefined && gr21b.x === 100 && gc21b && gc21b.cx === 300 && gc21b.cy === 120,
+      (gr21b && gr21b.x) + ',' + (gc21b && gc21b.cx));
+    /* 部件属性面板：任意角数值输入不再被 part 分支覆盖 */
+    const p21 = mkPart('resistor', 400, 300);
+    DP.state.selection = new Set();
+    click(400, 300);
+    t('部件面板：点选部件', DP.state.selection.has(p21.id), [...DP.state.selection].join(','));
+    const props21 = document.getElementById('props').innerHTML;
+    t('部件面板：含任意角数值输入 pRotDeg', /id="pRotDeg"/.test(props21));
+    t('部件面板：保留 ±90° 快捷键与端子列表', /data-flip/.test(props21) && /接线端/.test(props21));
+    const inp21 = document.getElementById('pRotDeg');
+    if (inp21) {
+      inp21.value = '30';
+      inp21.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    const p21b = DP.state.objects.find((o) => o.id === p21.id);
+    t('部件面板：数值输入写入 rot=30', p21b && Math.abs(p21b.rot - 30) < 0.6, p21b && p21b.rot);
+    /* 清场 */
+    DP.state.objects = [];
+    DP.state.selection = new Set();
+    DP.ui.render();
+  })();
+
   if (errors.length) out.push('PAGE_ERRORS: ' + errors.join(' | '));
   out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
   document.getElementById('r').textContent = out.join('\n');

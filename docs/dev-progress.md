@@ -477,3 +477,17 @@
 - 逻辑 **166/166**（+11：能力位、线 90° 端点、弧角平移、字段 rotation、bbox 包络、rotToLocal 往返、path 变换、text 沿用 rot）、交互 **109/109**（+6：拖手柄 90°、transform 渲染、旋转后世界坐标命中、线几何旋转、撤销还原、节点手柄贴旋转角点）、历史 23/23、PNG 31758B。
 - 截图核对：45° 矩形包络 + 旋转手柄 + 节点手柄贴实际角点、30° 斜线。
 - 踩坑：headless Chrome file:// 有磁盘缓存，截图可能用旧 JS——DOM 探针（dump-dom 数元素）比截图可靠；探针正则要按实际输出（fill="#ffffff"）匹配。
+
+## 阶段 8-d 补全：旋转柄梳理——部件面板输入修复 + 多选组旋转（2026-11-05）
+
+### 梳理结论
+- 画布旋转柄已覆盖：part（全部 ~130 部件，o.rot）、text（o.rot）、12 个 rotate:true 图元（6 几何法 + 6 字段法）；circle/point 旋转对称不参与（合理）。
+- 缺口三处：① 部件属性面板 `extra =` 被 part 分支直接赋值覆盖，丢 pRotDeg 任意角数值输入；② 多选无旋转柄，无法任意角组旋转；③「旋转90°」按钮多选时各对象绕自身转（非组旋转）。
+
+### 实现
+- **core.js `M.rotateAround(o, pivot, rad)`**：绕任意点刚体旋转 = rotateObj 自转 + 中心平移补偿（记自转前中心 c0 与自转后中心 c0'，平移到 c0 绕 pivot 旋转后的位置）。对"自转圆心≠bbox 中心"的 arc 也精确（合成平移 t = pivot − R·pivot − A + R·A 恰好相消）；circle/point 退化跟随平移。
+- **ui.js**：① part 面板改 `extra +=`（pRotDeg + ±90°/翻转/端子共存）；② 多选画旋转柄 + handleAt 多选检测（单选取 rotatable，多选恒可）；③ onDown/onMove rotate 分支多选走 `rotateAround`（pivot=选区中心，Shift 15° 步进、度数浮标沿用）；④ `U.rotate` 多选改组旋转（单选仍绕自身；点/圆单选提示）。
+
+### 验证
+- 逻辑 **173/173**（+7：line 绕外点 90°、arc 圆心补偿、rect 字段法平移+包络中心、circle 跟随、part 中心绕 pivot、刚体距离守恒）、交互 **119/119**（+10：多选画柄、拖柄组转 rect/circle/包络中心断言、U.rotate 组转、撤销还原、部件面板 pRotDeg/快捷键/数值写 rot=30）、历史 23/23。
+- 截图核对：斜面+物块+力箭头三部件组转 30°，姿态正确，组旋转柄 + 四角缩放柄正常。
