@@ -625,6 +625,45 @@
     DP.ui.render();
   })();
 
+  /* ---------- 20. 任意角旋转：手柄 / 字段法 / 几何法（阶段 8-d） ---------- */
+  (function () {
+    DP.state.objects = [];
+    DP.state.selection = new Set();
+    /* 字段法：矩形拖旋转手柄 90° */
+    DP.state.objects.push({ id: 'rotR', type: 'rect', x: 300, y: 150, w: 80, h: 70, style: Object.assign({}, DP.state.style) });
+    DP.state.selection = new Set(['rotR']);
+    DP.ui.setTool('select');
+    drag(340, 124, 370, 185); /* 手柄在 bbox 上方中点，绕中心 (340,185) 转到正右方 = 90° */
+    const rr20 = DP.state.objects[0];
+    t('旋转：拖手柄写入 rotation（90°）', Math.abs(rr20.rotation - 90) < 0.5, rr20.rotation);
+    t('旋转：渲染带 transform', /rotate\(9?0/.test(document.getElementById('board').innerHTML));
+    /* 旋转后命中：点旋转区域内的世界坐标可选中 */
+    DP.state.selection = new Set();
+    click(310, 190); /* 原矩形外、旋转后包络内 */
+    t('旋转：旋转后按世界坐标命中', DP.state.selection.has('rotR'), [...DP.state.selection].join(','));
+    /* 几何法：线 90° 菜单旋转 → 端点变换 */
+    DP.state.objects.push({ id: 'rotL', type: 'line', x1: 500, y1: 200, x2: 600, y2: 200, style: Object.assign({}, DP.state.style) });
+    DP.state.selection = new Set(['rotL']);
+    DP.ui.rotate(90);
+    const rl20 = DP.state.objects[1];
+    t('旋转：线 90° 端点几何变换', Math.abs(rl20.x1 - 550) < 0.5 && Math.abs(rl20.y1 - 150) < 0.5 && Math.abs(rl20.y2 - 250) < 0.5 && rl20.rotation === undefined,
+      rl20.x1 + ',' + rl20.y1 + ' ~ ' + rl20.x2 + ',' + rl20.y2);
+    /* 撤销还原 */
+    DP.history.undo();
+    t('旋转：撤销还原线端点', DP.state.objects[1] && DP.state.objects[1].x1 === 500, DP.state.objects[1] && DP.state.objects[1].x1);
+    /* 旋转后节点手柄贴世界角点（不再是未旋转角点） */
+    DP.state.selection = new Set(['rotR']);
+    DP.ui.render();
+    const svg20 = document.getElementById('board').innerHTML;
+    const hs20 = (svg20.match(/width="9" height="9" fill="#ffffff"/g) || []).length;
+    t('旋转：节点手柄随旋转贴世界角点', hs20 === 4 && !/x="295\.5"/.test(svg20) && /x="370\.5"/.test(svg20),
+      hs20 + ' stale=' + /x="295\.5"/.test(svg20));
+    /* 清场 */
+    DP.state.objects = [];
+    DP.state.selection = new Set();
+    DP.ui.render();
+  })();
+
   if (errors.length) out.push('PAGE_ERRORS: ' + errors.join(' | '));
   out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
   document.getElementById('r').textContent = out.join('\n');

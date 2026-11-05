@@ -76,7 +76,19 @@
         hint: '拖动绘制光线（实线 + 中间箭头）；Shift 锁 15°',
       },
       menu: { tab: 'draw', category: 'shape', group: 'shape', order: 35 },
-      capabilities: { fill: false, rotate: false, resize: true, bind: true },
+      capabilities: { fill: false, rotate: true, resize: true, bind: true },
+
+      /* 任意角旋转（阶段 8-d）：绕局部 bbox 中心转端点（几何法，粘附/吸附保持正确） */
+      rotate: function (o, rad) {
+        var cx = (o.x1 + o.x2) / 2, cy = (o.y1 + o.y2) / 2;
+        var cos = Math.cos(rad), sin = Math.sin(rad);
+        var ax = o.x1, ay = o.y1, bx = o.x2, by = o.y2;
+        o.x1 = cx + (ax - cx) * cos - (ay - cy) * sin;
+        o.y1 = cy + (ax - cx) * sin + (ay - cy) * cos;
+        o.x2 = cx + (bx - cx) * cos - (by - cy) * sin;
+        o.y2 = cy + (bx - cx) * sin + (by - cy) * cos;
+      },
+
 
       defaults: defaults,
 

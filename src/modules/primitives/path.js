@@ -62,7 +62,18 @@
         hint: '贝塞尔曲线 / 自由绘制',
       },
       menu: { tab: 'draw', category: 'shape', group: 'shape', order: 50 },
-      capabilities: { fill: true, rotate: false, resize: true },
+      capabilities: { fill: true, rotate: true, resize: true },
+
+      /* 任意角旋转（阶段 8-d）：绕局部 bbox 中心变换整条 path */
+      rotate: function (o, rad) {
+        var bb = this.bbox(o);
+        var cx = bb.x + bb.w / 2, cy = bb.y + bb.h / 2;
+        var cos = Math.cos(rad), sin = Math.sin(rad);
+        o.d = DP.geom.mapPath(o.d, function (p) {
+          var dx = p.x - cx, dy = p.y - cy;
+          return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+        });
+      },
 
       defaults: defaults,
 

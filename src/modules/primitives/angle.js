@@ -67,7 +67,7 @@
         hint: '单击顶点 → 边1 → 边2',
       },
       menu: { tab: 'draw', category: 'text', group: 'text', order: 140 },
-      capabilities: { fill: false, rotate: false, resize: true },
+      capabilities: { fill: false, rotate: true, resize: true },  /* rotation 字段法 */
 
       defaults: defaults,
 

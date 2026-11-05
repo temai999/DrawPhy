@@ -1042,20 +1042,23 @@
                 fill="${bound ? '#ff9f0a' : '#ffffff'}" stroke="#0a84ff" stroke-width="${G.round(1.3 / k)}"/>`;
             }
           }
-          /* 部件旋转手柄 */
-          if (objs.length === 1 && objs[0].type === 'part') {
+          /* 旋转手柄（部件/文字/任意角对象通用） */
+          if (objs.length === 1 && M.rotatable(objs[0])) {
             const cx = G.round(bb.x + bb.w / 2);
             const top = G.round(bb.y - 26 / k);
             s += `<line x1="${cx}" y1="${G.round(bb.y)}" x2="${cx}" y2="${top}" stroke="#0a84ff" stroke-width="${G.round(1 / k)}"/>`;
             s += `<circle cx="${cx}" cy="${top}" r="${G.round(5 / k)}" fill="#ffffff" stroke="#0a84ff" stroke-width="${G.round(1.3 / k)}"/>`;
             s += `<path d="M${G.round(bb.x + bb.w / 2 - 3 / k)} ${G.round(top + 5 / k)} A ${G.round(4 / k)} ${G.round(4 / k)} 0 0 1 ${G.round(bb.x + bb.w / 2 + 3.4 / k)} ${G.round(top + 3.6 / k)}" fill="none" stroke="#0a84ff" stroke-width="${G.round(1.2 / k)}"/>`;
           }
-          const pts = [
-            [bb.x, bb.y], [bb.x + bb.w, bb.y], [bb.x + bb.w, bb.y + bb.h], [bb.x, bb.y + bb.h],
-          ];
-          s += pts.map(([x, y]) =>
-            `<rect x="${x - hs}" y="${y - hs}" width="${hs * 2}" height="${hs * 2}" fill="#fff" stroke="#0a84ff" stroke-width="${1.2 / st.view.k}"/>`
-          ).join('');
+          /* 字段法旋转（rotation≠0）时缩放手柄会剪切变形，不画 */
+          if (!(objs.length === 1 && (objs[0].rotation || 0))) {
+            const pts = [
+              [bb.x, bb.y], [bb.x + bb.w, bb.y], [bb.x + bb.w, bb.y + bb.h], [bb.x, bb.y + bb.h],
+            ];
+            s += pts.map(([x, y]) =>
+              `<rect x="${x - hs}" y="${y - hs}" width="${hs * 2}" height="${hs * 2}" fill="#fff" stroke="#0a84ff" stroke-width="${1.2 / st.view.k}"/>`
+            ).join('');
+          }
         }
       }
     }
@@ -1122,6 +1125,7 @@
 
   /* ------------------------------- 命中测试 ------------------------------- */
   function hitObject(o, p, tol) {
+    if (M.rotOf(o)) p = M.rotToLocal(o, p); /* 旋转对象：点逆变换到局部系再命中 */
     const mod = M.moduleOf(o);
     if (mod && typeof mod.hitTest === 'function') return !!mod.hitTest(o, p, tol);
     /* 单轨收敛：未注册类型不可命中 */
@@ -1150,11 +1154,17 @@
   function getNodes(o) {
     const mod = M.moduleOf(o);
     if (mod && typeof mod.nodes === 'function') {
-      return (mod.nodes(o) || []).map((n) => ({
-        key: n.id, x: n.x, y: n.y,
-        kind: n.kind || 'anchor',
-        ax: n.ax, ay: n.ay,
-      }));
+      /* 字段法旋转：节点坐标转到世界系（拖动时再逆变换回局部，见 node 分支） */
+      const rot = (o.type !== 'part' && o.type !== 'text' && o.rotation) || 0;
+      return (mod.nodes(o) || []).map((n) => {
+        const w = rot ? M.rotToWorld(o, n) : n;
+        const a = rot && n.ax != null ? M.rotToWorld(o, { x: n.ax, y: n.ay }) : null;
+        return {
+          key: n.id, x: w.x, y: w.y,
+          kind: n.kind || 'anchor',
+          ax: a ? a.x : n.ax, ay: a ? a.y : n.ay,
+        };
+      });
     }
     return [];
   }
@@ -1184,13 +1194,15 @@
       }
       if (bestN) return { kind: 'node', key: bestN.key, ctrl: bestN.kind === 'ctrl', bb };
     }
-    /* 旋转手柄：单个部件 */
-    if (objs.length === 1 && objs[0].type === 'part') {
+    /* 旋转手柄：单个可旋转对象（part/text 用既有 rot；其余 rotation/几何 rotate） */
+    if (objs.length === 1 && M.rotatable(objs[0])) {
       const cx = bb.x + bb.w / 2, cy = bb.y - 26 / st.view.k;
       if (Math.hypot(p.x - cx, p.y - cy) <= tol) {
         return { kind: 'rot', bb, cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2 };
       }
     }
+    /* 字段法旋转（rotation≠0）的对象：缩放会剪切变形，隐藏四角手柄 */
+    if (objs.length === 1 && (objs[0].rotation || 0)) return null;
     const hs = [
       ['nw', bb.x, bb.y], ['ne', bb.x + bb.w, bb.y],
       ['se', bb.x + bb.w, bb.y + bb.h], ['sw', bb.x, bb.y + bb.h],
@@ -1253,7 +1265,7 @@
       if (h && h.kind === 'rot') {
         const obj = DP.sel.list()[0];
         const a0 = G.deg(Math.atan2(p0.y - h.cy, p0.x - h.cx));
-        D = { mode: 'rotate', obj, cx: h.cx, cy: h.cy, a0, rot0: obj.rot || 0, moved: false };
+        D = { mode: 'rotate', obj, cx: h.cx, cy: h.cy, a0, rot0: M.rotOf(obj), lastRot: M.rotOf(obj), moved: false };
         cap(e);
         return;
       }
@@ -1743,7 +1755,11 @@
     /* 节点拖动：改形状，并实时吸附（控制把柄不吸附，Shift = 平滑点两侧联动） */
     if (D.mode === 'node') {
       const sp = D.ctrl ? p : snap(p, { exclude: new Set([D.obj.id]) });
-      setNode(D.obj, D.key, sp, { mirror: !!e.shiftKey });
+      /* 字段法旋转：世界点逆变换回局部系再写模块 */
+      const local = (D.obj.type !== 'part' && D.obj.type !== 'text' && D.obj.rotation)
+        ? M.rotToLocal(D.obj, sp)
+        : sp;
+      setNode(D.obj, D.key, local, { mirror: !!e.shiftKey });
       D.snapOid = D.ctrl ? null : sp.oid;
       D.snapTerminal = sp.terminal || null;
       D.moved = true;
@@ -1754,13 +1770,15 @@
       U.render();
       return;
     }
-    /* 旋转拖动 */
+    /* 旋转拖动：角度增量走 M.rotateObj（几何法模块变端点，字段法记 rotation） */
     if (D.mode === 'rotate') {
       const a = G.deg(Math.atan2(p.y - D.cy, p.x - D.cx));
       let rot = D.rot0 + (a - D.a0);
       if (e.shiftKey) rot = Math.round(rot / 15) * 15;
       rot = ((Math.round(rot * 10) / 10) % 360 + 360) % 360;
-      D.obj.rot = rot;
+      const delta = rot - D.lastRot;
+      if (delta) M.rotateObj(D.obj, G.rad(delta));
+      D.lastRot = rot;
       D.moved = true;
       D.badge = { x: p.x + 14 / st.view.k, y: p.y - 10 / st.view.k, text: `${Math.round(rot)}°` };
       U.render();
@@ -2581,19 +2599,13 @@
     const sel = DP.sel.list();
     if (!sel.length) return;
     DP.history.push();
+    let unsupported = false;
     for (const o of sel) {
-      if (o.type === 'part' || o.type === 'text') {
-        const cur = o.rot != null ? o.rot : (o.rotate || 0);
-        o.rot = ((cur + delta) % 360 + 360) % 360;
-        delete o.rotate; // 兼容旧工程后统一到 rot
-      } else {
-        M.translateObj(o, 0, 0);
-      }
+      if (M.rotatable(o)) M.rotateObj(o, G.rad(delta));
+      else unsupported = true;
     }
     afterChange();
-    if (sel.some((o) => o.type !== 'part' && o.type !== 'text')) {
-      U.toast('当前版本仅部件与文字支持旋转');
-    }
+    if (unsupported) U.toast('点、圆不支持旋转（其余对象已旋转）');
   };
 
   U.align = function (mode) {
@@ -2723,6 +2735,9 @@
           <option value="2"${n === 2 ? ' selected' : ''}>三等分 2 个</option>
         </select></div>`;
       }
+      if (sel.length === 1 && M.rotatable(sel[0])) {
+        extra += `<div class="row"><label>旋转</label><input type="number" id="pRotDeg" step="15" value="${G.round(M.rotOf(sel[0]))}" title="任意角旋转（Shift 拖手柄 = 15° 步进）">°</div>`;
+      }
       if (sel.length === 1 && sel[0].type === 'part') {
         const def = DP.parts.byId[sel[0].partId];
         const terms = (def && def.terminals) || [];
@@ -2834,6 +2849,18 @@
     on('pRayCount', 'change', (e) => {
       const v = +e.target.value === 2 ? 2 : 1;
       apply((o) => { (o.style || st.style).rayArrows = v; });
+    });
+    on('pRotDeg', 'change', (e) => {
+      const obj = sel[0];
+      if (!obj) return;
+      const target = ((+e.target.value || 0) % 360 + 360) % 360;
+      const cur = ((M.rotOf(obj) % 360) + 360) % 360;
+      let d = target - cur;
+      if (d > 180) d -= 360;
+      if (d < -180) d += 360;
+      DP.history.push();
+      M.rotateObj(obj, G.rad(d));
+      afterChange();
     });
     on('pageW', 'change', (e) => { st.page.w = Math.max(200, +e.target.value || 1240); U.render(); });
     on('pageH', 'change', (e) => { st.page.h = Math.max(200, +e.target.value || 820); U.render(); });

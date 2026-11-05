@@ -64,7 +64,14 @@
         hint: '单击定圆心 → 定起点 → 定终点',
       },
       menu: { tab: 'draw', category: 'shape', group: 'shape', order: 85 },
-      capabilities: { fill: true, rotate: false, resize: true },
+      capabilities: { fill: true, rotate: true, resize: true },
+
+      /* 任意角旋转（阶段 8-d）：圆心不动，起止角平移 */
+      rotate: function (o, rad) {
+        var d = rad * 180 / Math.PI;
+        o.a0 += d;
+        o.a1 += d;
+      },
 
       defaults: defaults,
 

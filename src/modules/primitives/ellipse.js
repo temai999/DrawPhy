@@ -63,7 +63,7 @@
         hint: '拖动画椭圆；Shift 正圆',
       },
       menu: { tab: 'draw', category: 'shape', group: 'shape', order: 75 },
-      capabilities: { fill: true, rotate: false, resize: true },
+      capabilities: { fill: true, rotate: true, resize: true },  /* rotation 字段法 */
 
       defaults: defaults,
 

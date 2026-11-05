@@ -678,6 +678,52 @@
       /* 恢复默认状态，避免影响后续（无后续也保持整洁） */
       T.fromJSON({ objects: [] });
     })();
+
+    /* ---- 阶段 8-d：任意角旋转（M.rotateObj / rotToLocal / localBBox 包络） ---- */
+    (function () {
+      const T = DP.model, S = DP.state;
+      /* 能力位 */
+      ok('旋转：rect 可旋转（字段法）', T.rotatable({ type: 'rect' }));
+      ok('旋转：circle/point 不可旋转', !T.rotatable({ type: 'circle' }) && !T.rotatable({ type: 'point' }));
+      ok('旋转：part/text 沿用既有能力', T.rotatable({ type: 'part' }) && T.rotatable({ type: 'text' }));
+
+      /* 几何法：线绕中心转 90° → 竖直 */
+      const ln = { type: 'line', x1: 0, y1: 0, x2: 100, y2: 0, style: {} };
+      T.rotateObj(ln, Math.PI / 2);
+      ok('旋转：线 90° 端点几何变换', Math.abs(ln.x1 - 50) < 0.01 && Math.abs(ln.y1 + 50) < 0.01 && Math.abs(ln.x2 - 50) < 0.01 && Math.abs(ln.y2 - 50) < 0.01,
+        ln.x1 + ',' + ln.y1 + ' ~ ' + ln.x2 + ',' + ln.y2);
+
+      /* 圆弧：角度平移 */
+      const arc = { type: 'arc', cx: 0, cy: 0, r: 40, a0: 0, a1: 90, style: {} };
+      T.rotateObj(arc, Math.PI / 2);
+      ok('旋转：弧起止角平移', Math.abs(arc.a0 - 90) < 0.01 && Math.abs(arc.a1 - 180) < 0.01, arc.a0 + '~' + arc.a1);
+
+      /* 字段法：rect rotation + bbox 包络 */
+      const rc = { type: 'rect', x: 0, y: 0, w: 100, h: 50, style: {} };
+      T.rotateObj(rc, Math.PI / 2);
+      ok('旋转：字段法记 rotation', Math.abs(rc.rotation - 90) < 0.01, rc.rotation);
+      const env = T.localBBox(rc);
+      ok('旋转：bbox 取旋转后包络', Math.abs(env.w - 50) < 0.01 && Math.abs(env.h - 100) < 0.01 && Math.abs(env.x - 25) < 0.01,
+        JSON.stringify(env));
+
+      /* 逆变换：旋转后的包络中心即原中心；中心点局部坐标不变 */
+      const c = { x: 50, y: 25 };
+      const lc = T.rotToLocal(rc, c);
+      ok('旋转：中心点逆变换不变', Math.abs(lc.x - 50) < 0.01 && Math.abs(lc.y - 25) < 0.01, lc.x + ',' + lc.y);
+      const w1 = T.rotToWorld(rc, T.rotToLocal(rc, { x: 0, y: 0 }));
+      ok('旋转：local→world 往返一致', Math.abs(w1.x) < 0.01 && Math.abs(w1.y) < 0.01, w1.x + ',' + w1.y);
+
+      /* path 几何法：bezier 整条旋转，形状不变（长度守恒） */
+      const d0 = 'M 0 0 Q 50 -60 100 0';
+      const pth = { type: 'path', d: d0, style: {} };
+      T.rotateObj(pth, Math.PI / 2);
+      ok('旋转：path 几何变换', /^M/.test(pth.d) && /Q/.test(pth.d) && pth.d !== d0, pth.d);
+
+      /* part/text 沿用 rot 字段 */
+      const pt = { type: 'text', x: 0, y: 0, rot: 30, style: {} };
+      T.rotateObj(pt, Math.PI / 6);
+      ok('旋转：text 沿用 rot 字段', Math.abs(pt.rot - 60) < 0.01 && pt.rotation === undefined, pt.rot);
+    })();
   } catch (e) {
     ok('运行异常', false, e && e.message);
   }

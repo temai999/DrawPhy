@@ -63,7 +63,21 @@
         hint: '逐点单击；双击或回车结束',
       },
       menu: { tab: 'draw', category: 'shape', group: 'shape', order: 40 },
-      capabilities: { fill: true, rotate: false, resize: true },
+      capabilities: { fill: true, rotate: true, resize: true },
+
+      /* 任意角旋转（阶段 8-d）：绕点集包围盒中心转所有点 */
+      rotate: function (o, rad) {
+        var xs = [], ys = [], i;
+        for (i = 0; i < o.points.length; i++) { xs.push(o.points[i][0]); ys.push(o.points[i][1]); }
+        var cx = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2;
+        var cy = (Math.min.apply(null, ys) + Math.max.apply(null, ys)) / 2;
+        var cos = Math.cos(rad), sin = Math.sin(rad);
+        for (i = 0; i < o.points.length; i++) {
+          var dx = o.points[i][0] - cx, dy = o.points[i][1] - cy;
+          o.points[i][0] = cx + dx * cos - dy * sin;
+          o.points[i][1] = cy + dx * sin + dy * cos;
+        }
+      },
 
       defaults: defaults,
 

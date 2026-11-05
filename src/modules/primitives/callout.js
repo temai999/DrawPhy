@@ -73,7 +73,7 @@
         hint: '先点标注指向处，再点文本框位置',
       },
       menu: { tab: 'draw', category: 'text', group: 'text', order: 120 },
-      capabilities: { fill: true, rotate: false, resize: true },
+      capabilities: { fill: true, rotate: true, resize: true },  /* rotation 字段法 */
 
       defaults: defaults,
 

@@ -165,15 +165,17 @@
   R.object = function (o) {
     const rs = o.style || DP.state.style;
     const mod = o && DP.registry && DP.registry.get ? DP.registry.get(o.type) : null;
-    if (mod && typeof mod.render === 'function') {
-      return R.drawable(mod.render(o, { style: rs }));
+    let inner = mod && typeof mod.render === 'function'
+      ? R.drawable(mod.render(o, { style: rs }))
+      : R.primitive(o, rs);
+    /* 通用 rotation 字段（阶段 8-d）：part/text 的 rot 由各自模块渲染 */
+    const rot = (o.type !== 'part' && o.type !== 'text' && o.rotation) || 0;
+    if (rot && mod && typeof mod.bbox === 'function') {
+      const bb = mod.bbox(o);
+      const cx = r2(bb.x + bb.w / 2), cy = r2(bb.y + bb.h / 2);
+      inner = `<g transform="rotate(${r2(rot)} ${cx} ${cy})">${inner}</g>`;
     }
-    switch (o.type) {
-      /* 复合类型（arrow/dim/angle/part/textbox/callout）已由模块 render 接管；
-         未注册类型回退图元渲染（primitive 内部仍按图元类型分派） */
-      default:
-        return R.primitive(o, rs);
-    }
+    return inner;
   };
 
   /* 按数组顺序逐个渲染，保证层级正确（组合只是选择语义）；

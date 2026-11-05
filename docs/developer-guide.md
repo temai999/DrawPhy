@@ -181,6 +181,16 @@ if (mod && mod.translate) { mod.translate(o, dx, dy); } else { /* 旧 switch 分
 - **消费点过滤**（新增图形行为时逐一对齐）：渲染与导出（render.js `R.objects`）、点选命中与框选（ui.js `hitTest`/marquee）、橡皮、修剪目标、吸附点/交点（core `S.collectPoints/S.intersections`）、破口接线（`M.findInsertWire`）。规则：**隐藏=不渲染不导出不命中不吸附；锁定=只是不可编辑（命中/框选/橡皮/修剪全部跳过），吸附保留**。切换显隐/锁定后要 `layerPruneSelection()` 清掉幽灵选择（ui.js `bindLayers` 的 refresh 已做）。
 - **面板**：renderProps 里 `layersHtml()` + `bindLayers()`；行点击设当前层、双击改名、眼睛点显隐、锁点锁定、空层出现 ×、底部新建。`U.renderProps` 已导出（自动化触发用）。
 
+### 4.10 任意角旋转：双轨模型（阶段 8-d）
+
+- **两条实现路径**（`M.rotateObj(o, rad)` 统一入口，按模块能力分派）：
+  1. **几何法**——模块定义 `rotate(o, rad)` 直接变几何：line/ray/arrow（转端点）、polyline（转点集）、path（`G.mapPath` 整条变换）、arc（a0/a1 平移）。端点粘附、吸附、修剪、节点编辑全部天然正确，`o.rotation` 恒为空。
+  2. **字段法**——`o.rotation`（度）+ 渲染期 `rotate(rot cx cy)` transform（render.js `R.object`，圆心 = 模块 bbox 中心）。适用 rect/ellipse/dim/angle/callout/textbox。part/text 沿用既有 `o.rot`（模块自渲染）。
+- **能力位**：`capabilities.rotate` 决定 UI 是否给旋转手柄；`M.rotatable(o)` 是唯一判定（part/text 恒真，circle/point 恒假）。给新模块加旋转 = 声明 capability + （可选）定义 `rotate`。
+- **几何消费点**（字段法必改，几何法自动正确）：`M.localBBox` 取旋转后包络（hit 粗筛/框选/对齐/参考线共用）；`hitObject` 命中前 `M.rotToLocal` 逆变换；`S.collectPoints` 锚点 `M.rotToWorld` 转世界系；overlay 节点手柄 `getNodes` 转世界系、node 拖动 `rotToLocal` 回局部再 `setNode`。
+- **UI 约定**：rotation≠0 的对象隐藏四角缩放手柄（世界轴向拉伸会剪切变形，放大缩小请先转回 0°）；旋转手柄在包络上方中点，Shift = 15° 步进；拖动增量走 `M.rotateObj`（不要直接写字段）；属性面板「旋转」输入框（pRotDeg）按最短方向补差角。
+- **已知限制**：字段法对象不支持缩放手柄；镜像与 rotation 的叠加未定义；inline 文字编辑器定位不跟随旋转。
+
 ## 5. 标准任务手册
 
 ### 5.1 新增一个图元类型（12 步）

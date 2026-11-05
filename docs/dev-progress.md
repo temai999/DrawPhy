@@ -464,3 +464,16 @@
 ### 验证
 - 逻辑 **155/155**（+15）、交互 **103/103**（+6：layer 戳、面板渲染、隐藏不渲染+清选择、锁定不可选/解锁可选）、历史 23/23、PNG 31758B。
 - 截图核对：两行图层（当前高亮、计数正确、眼睛/锁按钮）、画布正常。
+
+## 阶段 8-d：任意角旋转——双轨模型（2026-11-05）
+
+### 实现
+- **core.js**：`M.rotatable/rotOf/rotCenter/rotToWorld/rotToLocal/rotateObj`。双轨：模块 `rotate(o, rad)` 几何法（line/ray/arrow 转端点、polyline 转点集、path 走 G.mapPath、arc 平移起止角）；无 rotate 的模块回退 `o.rotation` 字段（度）；part/text 沿用既有 `o.rot`。`M.localBBox` 对 rotation≠0 取旋转后包络（命中粗筛/框选/对齐/参考线共用，一处改全局生效）。
+- **模块契约**：12 个图元 capabilities.rotate=true；几何法 rotate 落在 line/ray/arrow/polyline/path/arc。circle/point 不参与。
+- **消费点**：render.js `R.object` 字段法包 `<g transform=rotate>`（part/text 除外）；ui.js `hitObject` 逆旋转命中、`S.collectPoints` 锚点转世界、overlay 节点手柄 `getNodes` 转世界 + node 拖动 `rotToLocal` 回局部。
+- **UI**：旋转手柄通用化（所有 rotatable 单选对象）；拖动按角度增量走 `M.rotateObj`（几何法端点实时转、吸附/粘附保持正确）；Shift=15° 步进 + 度数浮标；rotation≠0 隐藏四角缩放手柄（防剪切变形）；`U.rotate` 菜单 90° 全对象可用；属性面板「旋转」数值输入（pRotDeg，最短方向补差）。
+
+### 验证
+- 逻辑 **166/166**（+11：能力位、线 90° 端点、弧角平移、字段 rotation、bbox 包络、rotToLocal 往返、path 变换、text 沿用 rot）、交互 **109/109**（+6：拖手柄 90°、transform 渲染、旋转后世界坐标命中、线几何旋转、撤销还原、节点手柄贴旋转角点）、历史 23/23、PNG 31758B。
+- 截图核对：45° 矩形包络 + 旋转手柄 + 节点手柄贴实际角点、30° 斜线。
+- 踩坑：headless Chrome file:// 有磁盘缓存，截图可能用旧 JS——DOM 探针（dump-dom 数元素）比截图可靠；探针正则要按实际输出（fill="#ffffff"）匹配。

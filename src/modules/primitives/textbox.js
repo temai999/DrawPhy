@@ -66,7 +66,7 @@
         hint: '单击落文本框；双击改字',
       },
       menu: { tab: 'draw', category: 'text', group: 'text', order: 110 },
-      capabilities: { fill: true, rotate: false, resize: true },
+      capabilities: { fill: true, rotate: true, resize: true },  /* rotation 字段法 */
 
       defaults: defaults,
 

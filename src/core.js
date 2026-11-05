@@ -578,15 +578,31 @@
   /* ------------------------------ 包围盒 ------------------------------ */
   M.localBBox = function (o) {
     const mod = moduleOf(o);
-    if (mod && typeof mod.bbox === 'function') return mod.bbox(o);
+    let bb = mod && typeof mod.bbox === 'function'
+      ? mod.bbox(o)
+      : null;
     /* 单轨收敛（阶段 5 收尾）：15 种类型全部由模块提供 bbox，
        未注册类型（模块缺失/未知类型）回退零包围盒并告警 */
-    if (!M._warnedType) M._warnedType = {};
-    if (!M._warnedType[o.type]) {
-      M._warnedType[o.type] = 1;
-      console.warn('[DrawPhy] 未注册类型缺 bbox 模块:', o.type);
+    if (!bb) {
+      if (!M._warnedType) M._warnedType = {};
+      if (!M._warnedType[o.type]) {
+        M._warnedType[o.type] = 1;
+        console.warn('[DrawPhy] 未注册类型缺 bbox 模块:', o.type);
+      }
+      bb = { x: 0, y: 0, w: 0, h: 0 };
     }
-    return { x: 0, y: 0, w: 0, h: 0 };
+    /* 通用 rotation 字段（阶段 8-d）：part/text 的 rot 已含在模块 bbox 里 */
+    const rot = (o.type !== 'part' && o.type !== 'text' && o.rotation) || 0;
+    if (!rot) return bb;
+    const cx = bb.x + bb.w / 2, cy = bb.y + bb.h / 2;
+    const r = G.rad(rot), cos = Math.cos(r), sin = Math.sin(r);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [px, py] of [[bb.x, bb.y], [bb.x + bb.w, bb.y], [bb.x + bb.w, bb.y + bb.h], [bb.x, bb.y + bb.h]]) {
+      const dx = px - cx, dy = py - cy;
+      const x = cx + dx * cos - dy * sin, y = cy + dx * sin + dy * cos;
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+    }
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   };
 
   M.bbox = function (objs) {
@@ -931,6 +947,58 @@
     return { reason: '修剪目前支持直线、圆和圆弧' };
   };
 
+  /* --------------------------- 任意角旋转（阶段 8-d） ---------------------------
+   * 双轨模型：
+   * 1) 模块可选 rotate(o, rad) —— 直接变几何（line/ray/arrow/polyline/path/arc），
+   *    端点粘附、吸附、修剪等几何消费全部天然正确；
+   * 2) 通用回退 —— o.rotation 字段（度），渲染期 transform（render.js），
+   *    bbox/hit/anchors 走本节包络与逆旋转。part/text 沿用既有 o.rot。
+   */
+  M.rotatable = function (o) {
+    if (!o) return false;
+    if (o.type === 'part' || o.type === 'text') return true;
+    const mod = moduleOf(o);
+    return !!(mod && mod.capabilities && mod.capabilities.rotate);
+  };
+  M.rotOf = function (o) {
+    if (!o) return 0;
+    if (o.type === 'part' || o.type === 'text') return o.rot || 0;
+    return o.rotation || 0;
+  };
+  /* 旋转中心 = 未旋转局部 bbox 中心（渲染 transform 与包络共用同一圆心） */
+  M.rotCenter = function (o) {
+    const mod = moduleOf(o);
+    const bb = mod && typeof mod.bbox === 'function' ? mod.bbox(o) : { x: 0, y: 0, w: 0, h: 0 };
+    return { x: bb.x + bb.w / 2, y: bb.y + bb.h / 2 };
+  };
+  M.rotToWorld = function (o, p) {
+    const r = G.rad(M.rotOf(o));
+    if (!r) return { x: p.x, y: p.y };
+    const c = M.rotCenter(o), dx = p.x - c.x, dy = p.y - c.y;
+    const cos = Math.cos(r), sin = Math.sin(r);
+    return { x: c.x + dx * cos - dy * sin, y: c.y + dx * sin + dy * cos };
+  };
+  M.rotToLocal = function (o, p) {
+    const r = G.rad(M.rotOf(o));
+    if (!r) return { x: p.x, y: p.y };
+    const c = M.rotCenter(o), dx = p.x - c.x, dy = p.y - c.y;
+    const cos = Math.cos(r), sin = Math.sin(r);
+    return { x: c.x + dx * cos + dy * sin, y: c.y - dx * sin + dy * cos };
+  };
+  /* 旋转 delta 弧度：有 rotate 的模块变几何，否则记 rotation 字段 */
+  M.rotateObj = function (o, rad) {
+    if (!o) return;
+    const mod = moduleOf(o);
+    if (mod && typeof mod.rotate === 'function') { mod.rotate(o, rad); return; }
+    if (o.type === 'part' || o.type === 'text') {
+      const cur = o.rot != null ? o.rot : (o.rotate || 0);
+      o.rot = ((cur + G.deg(rad)) % 360 + 360) % 360;
+      delete o.rotate;
+      return;
+    }
+    o.rotation = (((o.rotation || 0) + G.deg(rad)) % 360 + 360) % 360;
+  };
+
   /* --------------------------- 对象变换原语 --------------------------- */
   M.translateObj = function (o, dx, dy) {
     const mod = moduleOf(o);
@@ -967,7 +1035,10 @@
       if (!M.layerVisible(o)) continue;                     /* 隐藏图层不吸附 */
       const mod = moduleOf(o);
       if (mod && typeof mod.anchors === 'function') {
-        for (const a of mod.anchors(o) || []) push(a.x, a.y, anchorLabel(a), o.id, a.tid);
+        for (const a of mod.anchors(o) || []) {
+          const w = M.rotToWorld(o, a);  /* 旋转对象：锚点转到世界系 */
+          push(w.x, w.y, anchorLabel(a), o.id, a.tid);
+        }
         continue;
       }
       /* 未注册类型：无吸附锚点（15 种类型全部由模块 anchors 提供） */

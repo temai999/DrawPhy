@@ -75,7 +75,7 @@
         hint: '单击两点生成尺寸线',
       },
       menu: { tab: 'draw', category: 'text', group: 'text', order: 130 },
-      capabilities: { fill: false, rotate: false, resize: true },
+      capabilities: { fill: false, rotate: true, resize: true },  /* rotation 字段法 */
 
       defaults: defaults,
 
