@@ -382,3 +382,19 @@
 ### 验证
 - 逻辑 **119/119**、交互 **55/55**、历史 23/23、PNG 31758B。
 - 截图核对：缩放辅助线（品红虚线）+ 尺寸徽章 + 右边界贴齐参照；2.5 倍电阻/灯泡与 1 倍的线条粗细一致、无失真。
+
+## 阶段 7-d：多步绘制右键收笔 + 直角连线工具（2026-11-05，用户反馈）
+
+### 问题
+1. 折线/贝塞尔等多步线，最后一步右键直接消失，画不成。
+   原因：onDown 的 button===2 分支无条件进入框选缩放，contextmenu 又 setTool('select') 把 D 丢掉。
+2. 部件库「连接线」分类全是固定尺寸符号（wireH/wireElbow/wireDash/wireBus），不能像连线一样画。
+
+### 实现
+- **右键收笔**：isMultiStep(poly|bez|ortho) + finishMulti(shift)。右键 pointerdown 让开（不进 zoombox），contextmenu 里提交：折线追加光标点后 finishPoly(true)（重复点自动去重，多边形收笔在起点附近不重复闭合）；贝塞尔 stage=1 时以光标为终点 finishBez；Enter/双击同样走 finishMulti。
+- **直角连线工具 ortho（新，快捷键 I）**：左键起点 → 左键每次落一个直角弯 → 右键收笔。段方向自动按主运动方向（先横/先竖），Shift 强制先竖；orthoSeg 生成折点、simplifyOrtho 去重去共线；产出普通 polyline（closed:false），端点粘附/吸附照常可用。预览实时显示直角路径。
+- **连接线部件改为工具入口**：mk() 支持 extra 元数据；wireH/wireDash/wireBus → line 工具（drawStyle 预置 dashed/width:6），wireElbow → ortho。点击部件 = 进入绘制工具（连线是画出来的不是摆固定件），拖拽仍可放置固定符号；wireJumper（跳线）保留为符号部件。
+
+### 验证
+- 逻辑 **120/120**（+1 连接线元数据）、交互 **61/61**（+6：折线右键收笔、不弹菜单、贝塞尔右键收笔、直角连线正交、工具保持、工具表条目）、历史 23/23。
+- 探针验证：点击「直角连线」→ 工具切到 ortho；「虚线连线」→ line + dash=dashed；截图确认阶梯形连线/折线/贝塞尔均右键收笔成功、新工具图标在位。

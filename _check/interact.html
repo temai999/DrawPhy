@@ -391,6 +391,41 @@
   })(), 's=' + p11.s);
   DP.state.snap.anchors = false;
 
+  /* ---------- 12. 多步绘制：右键收笔（折线 / 贝塞尔 / 直角连线） ---------- */
+  function rc(wx, wy) {
+    pe('pointerdown', wx, wy, { button: 2, buttons: 2 });
+    const r = rect();
+    board.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true, cancelable: true, button: 2,
+      clientX: r.left + wx, clientY: r.top + wy,
+    }));
+  }
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  DP.ui.setTool('polyline');
+  click(100, 500); click(200, 540); pe('pointermove', 260, 520); rc(260, 520);
+  const pl12 = DP.state.objects.filter((o) => o.type === 'polyline')[0];
+  t('折线右键收笔：生成折线', !!pl12 && pl12.points.length >= 3, pl12 && pl12.points.length);
+  t('右键收笔不弹右键菜单', !document.getElementById('ctxMenu'));
+
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  DP.ui.setTool('bezier');
+  click(100, 300); click(160, 240); pe('pointermove', 240, 320); rc(240, 320);
+  const bz12 = DP.state.objects.filter((o) => o.type === 'path')[0];
+  t('贝塞尔右键收笔：生成曲线', !!bz12 && /^M .* Q /.test(bz12.d), bz12 && bz12.d);
+
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  DP.ui.setTool('ortho');
+  click(300, 300); click(380, 320); pe('pointermove', 460, 360); rc(460, 360);
+  const ol12 = DP.state.objects.filter((o) => o.type === 'polyline')[0];
+  const orthoOk12 = !!ol12 && ol12.points.every((p, i) => i === 0 ||
+    Math.abs(p[0] - ol12.points[i - 1][0]) < 0.6 || Math.abs(p[1] - ol12.points[i - 1][1]) < 0.6);
+  t('直角连线：生成折线且每段正交', orthoOk12, ol12 && JSON.stringify(ol12.points));
+  t('直角连线右键收笔后工具不变', DP.state.tool === 'ortho', DP.state.tool);
+  t('直角连线在工具表中', DP.ui.TOOLS.some((x) => x.id === 'ortho'));
+
   if (errors.length) out.push('PAGE_ERRORS: ' + errors.join(' | '));
   out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
   document.getElementById('r').textContent = out.join('\n');

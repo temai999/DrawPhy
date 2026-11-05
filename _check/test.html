@@ -433,6 +433,14 @@
     p5part.mirror(p5bat2, 'h');
     ok('part 镜像保持旧语义（只翻 flip）', p5bat2.flip === true && p5bat2.x === 100 && p5bat2.y === 100);
 
+    /* 阶段 7-d：连接线是「画」出来的，不是只能摆的固定件（点击进入绘制工具） */
+    ok('连接线部件带绘制工具元数据',
+      DP.parts.byId.wireElbow.drawTool === 'ortho' &&
+      DP.parts.byId.wireH.drawTool === 'line' &&
+      DP.parts.byId.wireDash.drawStyle && DP.parts.byId.wireDash.drawStyle.dash === 'dashed' &&
+      DP.parts.byId.wireBus.drawStyle && DP.parts.byId.wireBus.drawStyle.width === 6,
+      JSON.stringify([DP.parts.byId.wireElbow.drawTool, DP.parts.byId.wireH.drawTool]));
+
     const p5bat3 = { id: 'b3', type: 'part', partId: 'battery', x: 100, y: 100, s: 1, rot: 0, flip: false };
     const p5tp = DP.model.terminalPoint(p5bat3, '+');
     ok('terminalPoint 端子世界坐标', Math.abs(p5tp.x - 100) < 1e-6 && Math.abs(p5tp.y - 116) < 1e-6,

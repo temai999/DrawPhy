@@ -598,6 +598,15 @@
     btn.addEventListener('pointerdown', (e) => startPartDrag(e, pid));
     btn.addEventListener('click', () => {
       if (suppressPartClick) { suppressPartClick = false; return; }
+      const def = DP.parts.byId[pid];
+      /* 连接线类（drawTool）：点击 = 直接进入绘制工具，连线是「画」出来的而不是摆固定件；
+         想放固定符号时仍可把按钮拖到画布。 */
+      if (def && def.drawTool) {
+        if (def.drawStyle) Object.assign(st.style, def.drawStyle);
+        U.setTool(def.drawTool);
+        U.toast(`${def.name}：${def.drawHint || '在画布上绘制'}（拖到画布可放固定符号）`);
+        return;
+      }
       U.setTool('part', { partId: pid });
     });
   }
@@ -620,6 +629,8 @@
   function onContext(e) {
     e.preventDefault();
     closeCtx();
+    /* 多步绘制：右键收笔（折线 / 贝塞尔 / 直角连线），不弹菜单、不切工具 */
+    if (D && isMultiStep(D)) { finishMulti(e.shiftKey); return; }
     /* 右键出现菜单时：释放当前选中的工具图标，自动回到选择模式 */
     if (st.tool !== 'select') U.setTool('select');
     const p = toWorld(e);
@@ -738,7 +749,7 @@
 
   const CURSORS = {
     select: 'default', line: 'crosshair', arrow: 'crosshair', ray: 'crosshair', darrow: 'crosshair', polyline: 'crosshair',
-    polygon: 'crosshair', rect: 'crosshair', ellipse: 'crosshair', circle: 'crosshair',
+    polygon: 'crosshair', ortho: 'crosshair', rect: 'crosshair', ellipse: 'crosshair', circle: 'crosshair',
     arc: 'crosshair', freehand: 'crosshair', text: 'text', dim: 'crosshair',
     angle: 'crosshair', trim: 'crosshair', eraser: 'crosshair', fill: 'crosshair', part: 'copy',
     bezier: 'crosshair', textbox: 'crosshair', callout: 'crosshair',
@@ -1060,6 +1071,9 @@
       return;
     }
     if (e.button === 2) {
+      /* 多步绘制进行中：右键 = 「结束并完成」，不进框选缩放。
+         真正的提交在 onContext 里做（contextmenu 在下拉前触发），这里只让开。 */
+      if (D && isMultiStep(D)) { e.preventDefault(); return; }
       D = { mode: 'zoombox', start: toWorld(e), cur: toWorld(e), sx: e.clientX, sy: e.clientY };
       cap(e);
       return;
@@ -1196,6 +1210,19 @@
         D.cur = p;
       }
             cap(e);
+      U.render();
+      return;
+    }
+    /* 直角连线：只走水平/垂直。左键落起点，之后每按一次左键加一个直角弯，右键收笔。 */
+    if (tool === 'ortho') {
+      if (!D || D.mode !== 'ortho') {
+        D = { mode: 'ortho', pts: [[p.x, p.y]], cur: p };
+      } else {
+        const lastOrtho = D.pts[D.pts.length - 1];
+        D.pts = simplifyOrtho(D.pts.concat(orthoSeg({ x: lastOrtho[0], y: lastOrtho[1] }, p, e.shiftKey)));
+        D.cur = p;
+      }
+      cap(e);
       U.render();
       return;
     }
@@ -1444,7 +1471,7 @@
       U.render();
       return;
     }
-    if (D.mode === 'poly' || D.mode === 'arc' || D.mode === 'bez') {
+    if (D.mode === 'poly' || D.mode === 'arc' || D.mode === 'bez' || D.mode === 'ortho') {
       D.cur = snap(p, { shift: e.shiftKey });
       buildPreview(e.shiftKey);
       U.render();
@@ -1742,7 +1769,7 @@
       return;
     }
     if (D.mode === 'erase') { autosave(); D = null; return; }
-    if (D.mode === 'poly' || D.mode === 'arc') return; // 多次点击完成
+    if (D.mode === 'poly' || D.mode === 'arc' || D.mode === 'ortho' || D.mode === 'bez') return; // 多次点击完成
     if (D.mode === 'pan') {
       /* EE 习惯：中键单击（没拖动）= 适应画布；拖动了就是平移 */
       if (D.button === 1 && Math.hypot(e.clientX - D.sx, e.clientY - D.sy) < 4) U.fit();
@@ -1770,7 +1797,7 @@
   }
 
   function onDbl(e) {
-    if (D && D.mode === 'poly') finishPoly();
+    if (D && (D.mode === 'poly' || D.mode === 'ortho')) { finishMulti(false); return; }
     /* EE 习惯：双击已有文字/文本框/标注 直接进入编辑 */
     const p = toWorld(e);
     const hit = hitTest(p, 7 / st.view.k);
@@ -1792,10 +1819,99 @@
     }
   }
 
-  function finishPoly() {
+  /* ------------------------- 多步绘制（左键累加 / 右键收笔） -------------------------
+   * 用户习惯：折线、贝塞尔、直角连线都是「左键定第一点 → 左键继续 → 右键结束」。
+   * 之前右键会走 contextmenu → setTool('select')，把 D 直接丢掉，图形消失；
+   * 现在右键统一交给 finishMulti 提交。 */
+  function isMultiStep(d) {
+    return !!d && (d.mode === 'poly' || d.mode === 'bez' || d.mode === 'ortho');
+  }
+
+  function finishMulti(shift) {
+    if (!D) return;
+    if (D.mode === 'poly') finishPoly(true);
+    else if (D.mode === 'bez') finishBez();
+    else if (D.mode === 'ortho') finishOrtho(true, shift);
+  }
+
+  /* 直角连线的单段：把「上一点→目标点」拆成只含水平/垂直的折点。
+     vertFirst=true（Shift）先竖后横，否则按主运动方向自动选先横还是先竖。 */
+  function orthoSeg(from, to, vertFirst) {
+    const dx = to.x - from.x, dy = to.y - from.y;
+    if (Math.abs(dx) < 0.5 || Math.abs(dy) < 0.5) return [[to.x, to.y]];
+    const hFirst = vertFirst ? false : Math.abs(dx) >= Math.abs(dy);
+    return hFirst ? [[to.x, from.y], [to.x, to.y]] : [[from.x, to.y], [to.x, to.y]];
+  }
+
+  /* 去掉重复点与共线的中间点，避免一条直线存成三个点 */
+  function simplifyOrtho(pts) {
+    const dedup = [];
+    for (const p of pts) {
+      const last = dedup[dedup.length - 1];
+      if (last && Math.abs(p[0] - last[0]) < 0.5 && Math.abs(p[1] - last[1]) < 0.5) continue;
+      dedup.push(p);
+    }
+    const out = [];
+    for (let i = 0; i < dedup.length; i++) {
+      const a = out[out.length - 1], b = dedup[i], c = dedup[i + 1];
+      if (a && c) {
+        const sameX = Math.abs(a[0] - b[0]) < 0.5 && Math.abs(b[0] - c[0]) < 0.5;
+        const sameY = Math.abs(a[1] - b[1]) < 0.5 && Math.abs(b[1] - c[1]) < 0.5;
+        if (sameX || sameY) continue;
+      }
+      out.push(b);
+    }
+    return out;
+  }
+
+  function finishOrtho(useCur, vertFirst) {
+    if (!D || D.mode !== 'ortho') return;
+    let pts = D.pts.slice();
+    if (useCur && D.cur) {
+      const last = pts[pts.length - 1];
+      if (Math.abs(D.cur.x - last[0]) > 0.5 || Math.abs(D.cur.y - last[1]) > 0.5) {
+        pts = pts.concat(orthoSeg({ x: last[0], y: last[1] }, D.cur, vertFirst));
+      }
+    }
+    pts = simplifyOrtho(pts);
+    if (pts.length >= 2) {
+      DP.history.push();
+      st.objects.push({
+        id: M.uid('ol'), type: 'polyline', points: pts, closed: false,
+        style: M.clone(D.style || st.style),
+      });
+    }
+    D = null;
+    afterChange();
+  }
+
+  /* 贝塞尔右键收笔：起点+控制点已定时以光标处为终点；只有起点则取消 */
+  function finishBez() {
+    if (!D || D.mode !== 'bez') return;
+    if (D.stage !== 1 || !D.p1) { D = null; U.render(); return; }
+    const end = D.cur || D.p1;
+    if (G.dist(D.p0, end) < 2) { D = null; U.render(); return; }
+    DP.history.push();
+    st.objects.push({
+      id: M.uid('bz'), type: 'path',
+      d: `M ${G.round(D.p0.x)} ${G.round(D.p0.y)} Q ${G.round(D.p1.x)} ${G.round(D.p1.y)} ${G.round(end.x)} ${G.round(end.y)}`,
+      style: M.clone(D.style || st.style),
+    });
+    D = null;
+    afterChange();
+  }
+
+  function finishPoly(useCur) {
     if (!D || D.mode !== 'poly') return;
     const closed = D.tool === 'polygon';
-    let pts = D.pts.filter((p, i) => i === 0 || G.dist({ x: p[0], y: p[1] }, { x: D.pts[i - 1][0], y: D.pts[i - 1][1] }) > 2);
+    const raw = useCur && D.cur ? D.pts.concat([[D.cur.x, D.cur.y]]) : D.pts;
+    let pts = raw.filter((p, i) => i === 0 ||
+      G.dist({ x: p[0], y: p[1] }, { x: raw[i - 1][0], y: raw[i - 1][1] }) > 2);
+    /* 多边形右键收笔时若最后一点又回到起点附近，不重复追加 */
+    if (closed && pts.length > 2) {
+      const a = pts[0], b = pts[pts.length - 1];
+      if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 3) pts.pop();
+    }
     if (pts.length >= (closed ? 3 : 2)) {
       DP.history.push();
       st.objects.push({
@@ -1831,6 +1947,10 @@
     } else if (D.mode === 'poly') {
       const pts = D.pts.concat([[D.cur.x, D.cur.y]]);
       D.preview = { type: 'polyline', points: pts, closed: false, style: stl };
+    } else if (D.mode === 'ortho') {
+      const last = D.pts[D.pts.length - 1];
+      const seg = orthoSeg({ x: last[0], y: last[1] }, D.cur, !!shift);
+      D.preview = { type: 'polyline', points: D.pts.concat(seg), closed: false, style: stl };
     } else if (D.mode === 'arc') {
       if (D.stage === 0) {
         D.preview = { type: 'line', x1: D.cx, y1: D.cy, x2: D.cur.x, y2: D.cur.y, style: stl };
@@ -2118,7 +2238,7 @@
           if (m) { closeCtx(); break; }
           if (helpPanelEl) { closeHelp(); break; }
           U.closePartPop();
-          if (D && (D.mode === 'poly' || D.mode === 'bez' || D.mode === 'line2' ||
+          if (D && (D.mode === 'poly' || D.mode === 'bez' || D.mode === 'ortho' || D.mode === 'line2' ||
                     D.mode === 'arc' || D.mode === 'dim' || D.mode === 'angle' || D.mode === 'callout')) {
             D = null; U.render();
           } else {
@@ -2127,7 +2247,7 @@
           break;
         }
         case 'Enter':
-          if (D && D.mode === 'poly') finishPoly();
+          if (isMultiStep(D)) finishMulti(false);
           break;
         case 'Delete':
         case 'Backspace':
