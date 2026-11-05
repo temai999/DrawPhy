@@ -548,6 +548,12 @@
   t('帮助面板：工具快捷键自动生成', /选择/.test(htxt16) && /贝塞尔/.test(htxt16));
   t('帮助面板：含文档/编辑通用键', /Ctrl\+Z/.test(htxt16) && /Ctrl\+S/.test(htxt16));
 
+  /* ---------- 17. PDF 导出（打印 HTML，零依赖） ---------- */
+  const pdf17 = DP.io.pdfHtml();
+  t('PDF：打印页含 @page 画布尺寸', /@page\s*\{[^}]*size:\s*\d+px\s+\d+px/.test(pdf17),
+    (pdf17.match(/size:[^;]+/) || [''])[0]);
+  t('PDF：内嵌导出 SVG 并自动触发打印', /<svg xmlns/.test(pdf17) && /window\.print\(\)/.test(pdf17));
+
   if (errors.length) out.push('PAGE_ERRORS: ' + errors.join(' | '));
   out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
   document.getElementById('r').textContent = out.join('\n');

@@ -93,6 +93,39 @@
     DP.ui.toast('已保存工程 JSON（可再次打开编辑）');
   };
 
+  /* ------------------------------ 导出 PDF ------------------------------
+   * 零依赖方案（路线图阶段 8）：生成打印 HTML + window.print()，
+   * 用户在打印对话框里选「另存为 PDF」。@page 尺寸 = 画布尺寸（1px = 1/96in），
+   * 所以导出与画布所见即所得，不需要引入 PDF 库。 */
+  IO.pdfHtml = function () {
+    const svg = IO.svgString({ transparent: false });
+    const w = st.page.w, h = st.page.h;
+    return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>DrawPhy 导出</title>
+<style>
+  @page { size: ${w}px ${h}px; margin: 0; }
+  html, body { margin: 0; padding: 0; }
+  svg { display: block; }
+  @media screen {
+    body { background: #525659; display: flex; justify-content: center; padding: 16px; }
+    .print-tip { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+      color: #fff; background: rgba(0,0,0,.55); padding: 6px 14px; border-radius: 16px;
+      font: 12.5px/1.6 "Microsoft YaHei", sans-serif; }
+  }
+  @media print { .print-tip { display: none; } }
+</style></head>
+<body><div class="print-tip">在打印对话框中选择「另存为 PDF」即可导出（纸张方向与边距保持默认）</div>${svg}
+<script>setTimeout(function(){try{window.focus();window.print();}catch(e){}},250);<\/script></body></html>`;
+  };
+
+  IO.pdf = function () {
+    const win = window.open('', '_blank');
+    if (!win) { DP.ui.toast('浏览器拦截了打印窗口，请允许弹出窗口后重试'); return; }
+    win.document.open();
+    win.document.write(IO.pdfHtml());
+    win.document.close();
+    DP.ui.toast('已打开打印页：选择「另存为 PDF」完成导出');
+  };
+
   IO.openJson = function (file) {
     return new Promise((resolve, reject) => {
       const fr = new FileReader();

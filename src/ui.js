@@ -343,6 +343,7 @@
     btnRedo: () => { if (DP.history.redo()) { U.render(); renderProps(); } },
     btnPng: () => DP.io.png(2, false),
     btnSvg: () => DP.io.svg(),
+    btnPdf: () => DP.io.pdf(),
     btnCopy: () => DP.io.copyPng(),
     btnSample: () => DP.io.sample(),
     btnHelp: () => toggleHelp(),
@@ -358,7 +359,8 @@
       { id: 'btnSlots', label: '文档槽位' },
       { id: 'btnUndo', label: '撤销' }, { id: 'btnRedo', label: '重做' }] },
     'file.export': { items: [
-      { id: 'btnPng', label: '导出 PNG' }, { id: 'btnSvg', label: '导出 SVG' }, { id: 'btnCopy', label: '复制图片' }] },
+      { id: 'btnPng', label: '导出 PNG' }, { id: 'btnSvg', label: '导出 SVG' },
+      { id: 'btnPdf', label: '导出 PDF' }, { id: 'btnCopy', label: '复制图片' }] },
     'file.sample': { items: [{ id: 'btnSample', label: '示例' }] },
     'file.help': { items: [{ id: 'btnHelp', label: '快捷键' }] },
     'align.group': { items: [{ id: 'btnGroup', label: '组合' }, { id: 'btnUngroup', label: '取消组合' }] },
