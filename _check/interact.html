@@ -350,6 +350,47 @@
     wire10.x2 + ',' + wire10.y2);
   DP.state.snap.anchors = false;
 
+  /* ---------- 11. 阶段7-c：四角手柄缩放 + 缩放吸附辅助线 ---------- */
+  DP.state.snap.anchors = true;
+  DP.state.snap.grid = false;
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  const p11 = mkPart('battery', 300, 300);          // 包围盒 (268,284) 64×32
+  const refA11 = { id: 'REFA11', type: 'rect', x: 400, y: 60, w: 60, h: 60, style: Object.assign({}, DP.state.style) };
+  DP.state.objects.push(refA11);
+  DP.ui.setTool('select');
+  DP.state.selection = new Set([p11.id]);
+  DP.ui.render();
+  /* 东南角手柄 (332,316) 拖到 396 → 吸附到参照左边 400 */
+  pe('pointerdown', 332, 316);
+  pe('pointermove', 396, 316);
+  const guideShown11 = board.innerHTML.indexOf('#ff2d78') > -1;
+  pe('pointerup', 396, 316);
+  const bb11 = DP.model.localBBox(p11);
+  t('部件缩放时出现辅助线', guideShown11);
+  t('缩放吸附：右边界对齐参照左边 400', Math.abs(bb11.x + bb11.w - 400) < 0.8,
+    'right=' + Math.round(bb11.x + bb11.w) + ' bb=' + JSON.stringify(bb11) +
+    ' view=' + JSON.stringify(DP.state.view) + ' sel=' + [...DP.state.selection].join(','));
+  t('缩放吸附：部件等比放大', bb11.w > 100 && Math.abs(bb11.h / bb11.w - 32 / 64) < 0.02,
+    Math.round(bb11.w) + 'x' + Math.round(bb11.h));
+  /* 西北角手柄 (268,284) 向内拖 → 缩小（旧实现 nw 分母为 0，拖不动） */
+  const w11before = bb11.w;
+  DP.state.selection = new Set([p11.id]);
+  DP.ui.render();
+  const nw11 = DP.model.localBBox(p11);
+  pe('pointerdown', nw11.x, nw11.y);
+  pe('pointermove', nw11.x + 30, nw11.y);
+  pe('pointerup', nw11.x + 30, nw11.y);
+  const bb11b = DP.model.localBBox(p11);
+  t('西北角手柄可缩放（旧实现拖不动）', bb11b.w < w11before - 10,
+    Math.round(w11before) + ' → ' + Math.round(bb11b.w));
+  t('缩放时线宽保持不变（渲染反补偿）', (function () {
+    const m = /stroke-width="([\d.]+)"/.exec(DP.render.object(p11));
+    const sw = p11.s || 1;
+    return !!m && Math.abs(parseFloat(m[1]) * sw - (+DP.state.style.width || 2)) < 0.05;
+  })(), 's=' + p11.s);
+  DP.state.snap.anchors = false;
+
   if (errors.length) out.push('PAGE_ERRORS: ' + errors.join(' | '));
   out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
   document.getElementById('r').textContent = out.join('\n');

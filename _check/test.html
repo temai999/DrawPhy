@@ -406,8 +406,28 @@
 
     p5part.translate(p5bat, 10, 20);
     p5part.scale(p5bat, 2, 2, 0, 0);
-    ok('part 变换（中心定位 + s×k）', p5bat.x === 252 && p5bat.y === 256 && p5bat.s === 2,
+    /* 以 (0,0) 为锚点等比放大：左上角 (110,120) → (220,240)，尺寸 64×32 → 128×64 */
+    ok('part 变换（锚点不动 + s×k）', p5bat.x === 220 && p5bat.y === 240 && p5bat.s === 2,
       JSON.stringify({ x: p5bat.x, y: p5bat.y, s: p5bat.s }));
+
+    /* 阶段 7-c：部件等比缩放取「主导轴」，单向拖拽才跟手（旧实现取平均，宽度只变一半） */
+    const p5lead = { id: 'b2lead', type: 'part', partId: 'battery', x: 100, y: 100, s: 1, rot: 0, flip: false };
+    p5part.scale(p5lead, 2, 1, 0, 0);
+    ok('part 缩放取主导轴（sx=2,sy=1 → s=2）', Math.abs(p5lead.s - 2) < 1e-6, 's=' + p5lead.s);
+
+    /* 阶段 7-c：部件放大时内部线宽反向补偿（视觉线宽恒定） */
+    const p5big = { id: 'b2x', type: 'part', partId: 'battery', x: 100, y: 100, s: 2, rot: 0, flip: false, style: DP.state.style };
+    const p5svgBig = DP.render.object(p5big);
+    const p5wBig = /stroke-width="([\d.]+)"/.exec(p5svgBig);
+    const p5wBase = +DP.state.style.width || 2;
+    ok('部件放大 2 倍：内部线宽减半（视觉不变）',
+      !!p5wBig && Math.abs(parseFloat(p5wBig[1]) - p5wBase / 2) < 1e-6,
+      'got=' + (p5wBig && p5wBig[1]) + ' want=' + p5wBase / 2);
+    const p5small = { id: 'b2s', type: 'part', partId: 'battery', x: 100, y: 100, s: 0.5, rot: 0, flip: false, style: DP.state.style };
+    const p5wSmall = /stroke-width="([\d.]+)"/.exec(DP.render.object(p5small));
+    ok('部件缩小到 0.5：内部线宽加倍（视觉不变）',
+      !!p5wSmall && Math.abs(parseFloat(p5wSmall[1]) - p5wBase * 2) < 1e-6,
+      'got=' + (p5wSmall && p5wSmall[1]) + ' want=' + p5wBase * 2);
 
     const p5bat2 = { id: 'b2', type: 'part', partId: 'battery', x: 100, y: 100, s: 1, rot: 0, flip: false };
     p5part.mirror(p5bat2, 'h');

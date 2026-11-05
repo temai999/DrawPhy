@@ -29,6 +29,24 @@
       return o;
     }
 
+    /* 线宽/线型不随部件缩放：matrix 里的 s 会把 stroke-width 一起放大/缩小，
+       这里对子图元做反向补偿。只补偿对象自身的 s（画布 zoom 仍是正常缩放），
+       所以放大元器件时线条不会越来越粗，缩小后也不会细到看不见。 */
+    function rescaleStroke(svg, k) {
+      if (!svg || Math.abs(k - 1) < 1e-6) return svg;
+      var f = function (x) { return String(Math.round(x * k * 100) / 100); };
+      return svg
+        .replace(/stroke-width="([0-9.]+)"/g, function (_, v) {
+          return 'stroke-width="' + f(parseFloat(v)) + '"';
+        })
+        .replace(/stroke-dasharray="([^"]+)"/g, function (_, v) {
+          return 'stroke-dasharray="' + v.split(/[ ,]+/).map(function (n) {
+            var x = parseFloat(n);
+            return isFinite(x) ? f(x) : n;
+          }).join(' ') + '"';
+        });
+    }
+
     return {
       version: 1,
       meta: {
@@ -102,12 +120,20 @@
       },
 
       scale: function (o, sx, sy, ax, ay) {
-        var k = (Math.abs(sx) + Math.abs(sy)) / 2;
-        var bb = this.bbox(o);
-        var center = { x: bb.x + bb.w / 2, y: bb.y + bb.h / 2 };
-        var nc = { x: ax + (center.x - ax) * sx, y: ay + (center.y - ay) * sy };
+        /* 部件保持等比：取偏离 1 更多的那个方向作为统一比例。
+           旧实现取 (sx+sy)/2，只横向拖手柄时宽度只变一半，缩放跟不上手，
+           吸附辅助线也就对不准；改主导轴后单向拖动可以精确落在吸附线上。 */
+        var k = Math.abs(sx - 1) >= Math.abs(sy - 1) ? sx : sy;
+        if (!isFinite(k) || k <= 0) k = 1;
+        var bb0 = this.bbox(o);
+        var c0 = { x: bb0.x + bb0.w / 2, y: bb0.y + bb0.h / 2 };
         o.s = (o.s == null ? 1 : o.s) * k;
-        this.translate(o, nc.x - center.x, nc.y - center.y);
+        /* 锚点必须不动：先按新 s 求「未平移时」的实际中心，再补差值。
+           旧实现用旧尺寸算平移量，缩放后中心会跑掉（拖 se 时右边界对不上吸附线）。 */
+        var bb1 = this.bbox(o);
+        var c1 = { x: bb1.x + bb1.w / 2, y: bb1.y + bb1.h / 2 };
+        var tgt = { x: ax + (c0.x - ax) * k, y: ay + (c0.y - ay) * k };
+        this.translate(o, tgt.x - c1.x, tgt.y - c1.y);
       },
 
       /* 保持旧语义：mirror 只翻转 flip 标志（位置不动），不平移几何 */
@@ -121,7 +147,12 @@
         var def = defOf(o);
         if (!def) return { tag: 'g', attrs: {}, children: [] };
         var m = M.partMatrix(o);
-        var children = def.shapes.map(function (s) { return R.primitive(s, rs); });
+        var sAbs = Math.abs(o.s == null ? 1 : o.s);
+        if (sAbs < 1e-3) sAbs = 1e-3;
+        var inv = 1 / sAbs;
+        var children = def.shapes.map(function (sh) {
+          return rescaleStroke(R.primitive(sh, rs), inv);
+        });
         return {
           tag: 'g',
           attrs: { transform: 'matrix(' + m.map(function (v) { return Math.round(v * 100) / 100; }).join(' ') + ')' },

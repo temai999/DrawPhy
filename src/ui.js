@@ -1557,8 +1557,40 @@
     if (D.mode === 'scale') {
       const raw = { x: p.x, y: p.y };
       const a = D.anchor;
-      let sx = Math.abs(D.bb.x + D.bb.w - a.x) > 0.5 ? (raw.x - a.x) / (D.bb.x + D.bb.w - a.x) : 1;
-      let sy = Math.abs(D.bb.y + D.bb.h - a.y) > 0.5 ? (raw.y - a.y) / (D.bb.y + D.bb.h - a.y) : 1;
+      const bb = D.bb;
+      /* 四角缩放：比例按「被拖动的那条边」求。
+         旧实现两个轴都用右下/左下边作分母，nw/sw 的分母恒为 0，
+         表现为「西北、西南角手柄拖不动」，这里一并修掉。 */
+      const east = D.handle === 'ne' || D.handle === 'se';
+      const south = D.handle === 'se' || D.handle === 'sw';
+      const denx = east ? bb.x + bb.w - a.x : bb.x - a.x;
+      const deny = south ? bb.y + bb.h - a.y : bb.y - a.y;
+
+      /* 缩放吸附：拖动侧的那条边吸附到其它对象的左/中/右、上/中/下。
+         Shift 等比缩放时不吸附（否则会被拉离等比）。 */
+      D.guides = [];
+      let snapX = null, snapY = null;
+      if (st.snap.anchors && !e.shiftKey) {
+        const tol = 10 / st.view.k;
+        for (const o of st.objects) {
+          if (st.selection.has(o.id)) continue;
+          const b = M.localBBox(o);
+          if (!b.w && !b.h) continue;
+          for (const q of [b.x, b.x + b.w / 2, b.x + b.w]) {
+            const d = Math.abs(q - raw.x);
+            if (d <= tol && (!snapX || d < snapX.d)) snapX = { d, v: q, b };
+          }
+          for (const q of [b.y, b.y + b.h / 2, b.y + b.h]) {
+            const d = Math.abs(q - raw.y);
+            if (d <= tol && (!snapY || d < snapY.d)) snapY = { d, v: q, b };
+          }
+        }
+        if (snapX) raw.x = snapX.v;
+        if (snapY) raw.y = snapY.v;
+      }
+
+      let sx = Math.abs(denx) > 0.5 ? (raw.x - a.x) / denx : 1;
+      let sy = Math.abs(deny) > 0.5 ? (raw.y - a.y) / deny : 1;
       if (!isFinite(sx) || Math.abs(sx) < 0.02) sx = 0.02 * Math.sign(sx || 1);
       if (!isFinite(sy) || Math.abs(sy) < 0.02) sy = 0.02 * Math.sign(sy || 1);
       // 只取正方向缩放（避免翻转）
@@ -1570,6 +1602,30 @@
         M.scaleObj(o, sx, sy, a.x, a.y);
       });
       D.scaled = true;
+
+      /* 参考线用缩放后的真实包围盒画（拉长到参照对象），并给出实时尺寸 */
+      const nb = M.bbox(sel);
+      if (nb) {
+        const pad = 12 / st.view.k;
+        if (snapX) {
+          D.guides.push({
+            x1: snapX.v, x2: snapX.v,
+            y1: Math.min(nb.y, snapX.b.y) - pad,
+            y2: Math.max(nb.y + nb.h, snapX.b.y + snapX.b.h) + pad,
+          });
+        }
+        if (snapY) {
+          D.guides.push({
+            y1: snapY.v, y2: snapY.v,
+            x1: Math.min(nb.x, snapY.b.x) - pad,
+            x2: Math.max(nb.x + nb.w, snapY.b.x + snapY.b.w) + pad,
+          });
+        }
+        D.badge = {
+          x: p.x + 16 / st.view.k, y: p.y - 10 / st.view.k,
+          text: `${G.round(nb.w)} × ${G.round(nb.h)}`,
+        };
+      }
       U.render();
       return;
     }

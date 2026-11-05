@@ -153,6 +153,13 @@ if (mod && mod.translate) { mod.translate(o, dx, dy); } else { /* 旧 switch 分
 - **改这段前必读**：`breakWireInto` 用 `splice(idx, 1, L1, L2)` 原位替换且 **L1 沿用原导线 id**——分组、选择、外部引用都不失效；撤销恢复依赖 placePartAt 的「前 push + afterChange 后 push」双提交模式（第二条通常是空 diff 不入栈）。
 - **放置预览**：part 工具下光标移动即显示半透明部件（`partPreview` 变量 + `previewPartSvg()`），会破口时用页面底色盖掉将被替换的导线段并画出两个端子蓝点。**方向键微调**：part 工具下方向键调 `partNudge` 偏移（1px / Shift 10px），沿导线方向移动插入点；垂直方向若仍在吸附容差（`max(12, min(w,h)*0.6)`）内会被重新吸回导线，这是有意行为。放置后 `partNudge` 归零。
 
+### 4.6 部件缩放与线宽补偿（阶段 7-c）
+
+- **等比缩放取主导轴**：`part.scale` 里 `k = |sx-1| ≥ |sy-1| ? sx : sy`。旧实现取 `(sx+sy)/2`，只横向拖手柄时宽度只变一半，缩放跟不上手、吸附也对不准。
+- **锚点必须不动**：先按旧 bbox 求中心 `c0`，改 `s` 后再求「未平移时」的实际中心 `c1`，平移量 = 目标点（锚点 + (c0-锚点)×k）− `c1`。旧实现用旧尺寸算平移量，缩放后中心会跑掉，右边界对不上吸附线。
+- **线宽不随缩放变化**：`partMatrix` 的 `s` 会把 `stroke-width` 一起放大，`part.render` 里用 `rescaleStroke(svg, 1/s)` 对子图元做反向补偿（`stroke-width` 与 `stroke-dasharray` 都补）。只补偿对象自身的 `s`，画布 zoom 仍正常缩放；PNG/SVG 导出走同一渲染路径自动一致。
+- **缩放吸附辅助线**（ui.js `onMove` 的 scale 分支）：把**被拖动的那条边**（raw 坐标即边位置）吸附到其它对象的左/中/右、上/中/下；Shift 等比时不吸附。四角比例公式按「被拖动侧」取分母——旧实现两个轴都用对角边做分母，nw/sw 的分母恒为 0（**西北角手柄拖不动**），已修。参考线用缩放后的真实 `M.bbox` 画，并给 `D.badge` 显示实时宽×高。
+
 ## 5. 标准任务手册
 
 ### 5.1 新增一个图元类型（12 步）
