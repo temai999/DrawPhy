@@ -25,6 +25,7 @@
 <script src="../src/modules/primitives/angle.js"></script>
 <script src="../src/modules/host/part.js"></script>
 <script src="../src/modules/host/point.js"></script>
+<script src="../src/func.js"></script>
 <script src="../src/parts.js"></script>
 <script src="../src/render.js"></script>
 <script>
@@ -537,6 +538,42 @@
     } catch (e) {
       ok('破口接线运行异常', false, e && e.message);
     }
+
+    /* ---- 阶段 7：函数解析守卫（长度 / 嵌套 / 正常求值） ---- */
+    ok('compileFunc 正常求值', (function () {
+      const f = DP.compileFunc('sin(x)^2+cos(x)^2');
+      return Math.abs(f(0.7) - 1) < 1e-9;
+    })(), '');
+    ok('compileFunc 拒绝超长表达式', (function () {
+      try { DP.compileFunc('x' + '+x'.repeat(3000)); return false; }
+      catch (e) { return /过长|复杂/.test(e.message); }
+    })(), '');
+    ok('compileFunc 拒绝超深嵌套', (function () {
+      try { DP.compileFunc('('.repeat(80) + 'x' + ')'.repeat(80)); return false; }
+      catch (e) { return /嵌套过深/.test(e.message); }
+    })(), '');
+    ok('compileFunc 保留原有错误提示', (function () {
+      try { DP.compileFunc('foo(x)'); return false; }
+      catch (e) { return /不支持的函数/.test(e.message); }
+    })(), '');
+    ok('compileFunc 深链幂运算由守卫拦截（不爆栈）', (function () {
+      try {
+        DP.compileFunc('x' + '^x'.repeat(60));
+        return false; // 60 层幂链应当被深度闸门拦下
+      } catch (e) {
+        return /嵌套过深/.test(e.message);
+      }
+    })(), '');
+
+    /* ---- 阶段 7：模块 defaults 是唯一字段来源 ---- */
+    (function () {
+      const tb = DP.registry.get('textbox').defaults({ x: 4, y: 5, text: 'hi' });
+      ok('textbox defaults 补齐 w/h/size/style', tb.w === 0 && tb.h === 0 && tb.size === 14 && !!tb.style && tb.x === 4,
+        JSON.stringify({ w: tb.w, size: tb.size }));
+      const co = DP.registry.get('callout').defaults({ tx: 1, ty: 2, text: 'a' });
+      ok('callout defaults 补齐 box/size/style', co.w === 0 && co.h === 0 && co.size === 13 && !!co.style,
+        JSON.stringify({ w: co.w, size: co.size }));
+    })();
   } catch (e) {
     ok('运行异常', false, e && e.message);
   }

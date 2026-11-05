@@ -50,16 +50,12 @@
     }
     U.toast('就绪：上方选工具或部件，右侧调样式');
 
-    // 恢复本地草稿
+    // 恢复本地草稿（当前文档槽位）
     try {
-      const s = localStorage.getItem('drawphy.doc');
-      if (s) {
-        const d = JSON.parse(s);
-        if (d && d.objects && d.objects.length) {
-          M.fromJSON(d);
-          U.render();
-          U.toast('已恢复上次的草稿');
-        }
+      const n = DP.io && DP.io.restoreDraft ? DP.io.restoreDraft() : 0;
+      if (n) {
+        U.render();
+        U.toast('已恢复上次的草稿（' + n + ' 个对象）');
       }
     } catch (e) { /* ignore */ }
   };
@@ -333,12 +329,16 @@
      在 toggleRibInline 构建块内一次性绑定。 */
   const ACT = {
     btnNew: () => {
-      if (!confirm('新建会清空当前画布，继续？')) return;
+      if (!confirm('新建文档会清空当前画布（现在的内容仍留在原槽位里），继续？')) return;
       st.objects = []; st.selection = new Set(); st.groups = {};
-      DP.history.reset(); U.render(); renderProps(); autosave();
+      /* 多文档槽位：新建 = 开一个空槽位，不在原槽位上覆盖 */
+      if (DP.io && DP.io.newSlot) DP.io.newSlot(); else autosave();
+      DP.history.reset(); U.render(); renderProps();
+      U.toast('已新建文档槽位，可从「文档槽位」切回旧文档');
     },
     btnOpen: () => document.getElementById('fileInput').click(),
     btnSave: () => DP.io.saveJson(),
+    btnSlots: (btn) => U.toggleSlotPop(btn),
     btnUndo: () => { if (DP.history.undo()) { U.render(); renderProps(); } },
     btnRedo: () => { if (DP.history.redo()) { U.render(); renderProps(); } },
     btnPng: () => DP.io.png(2, false),
@@ -355,6 +355,7 @@
   const PANELS = {
     'file.action': { items: [
       { id: 'btnNew', label: '新建' }, { id: 'btnOpen', label: '打开' }, { id: 'btnSave', label: '保存' },
+      { id: 'btnSlots', label: '文档槽位' },
       { id: 'btnUndo', label: '撤销' }, { id: 'btnRedo', label: '重做' }] },
     'file.export': { items: [
       { id: 'btnPng', label: '导出 PNG' }, { id: 'btnSvg', label: '导出 SVG' }, { id: 'btnCopy', label: '复制图片' }] },
@@ -469,7 +470,7 @@
     /* 动态 id 按钮 → ACT 表一次性绑定（面板每次打开时绑定，随面板销毁） */
     el.querySelectorAll('button[id]').forEach((b) => b.addEventListener('click', () => {
       const fn = ACT[b.id];
-      if (fn) fn();
+      if (fn) fn(b);
     }));
     /* 视图 checkbox：勾选交互 + 打开面板时同步当前状态 */
     el.querySelectorAll('input[type=checkbox][id]').forEach((c) => c.addEventListener('change', () => {
@@ -816,7 +817,7 @@
       'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:8;' +
       'background:rgba(255,255,255,.98);border:1px solid #e5eaf0;border-radius:12px;' +
       'box-shadow:0 12px 32px rgba(20,40,60,.18);padding:16px 20px;' +
-      'max-width:440px;max-height:80%;overflow:auto;');
+      'width:560px;max-width:92%;max-height:86%;overflow:auto;');
     helpPanelEl.innerHTML =
       `<div class="props-title" style="display:flex;align-items:center;justify-content:space-between;margin:0 0 8px">` +
       `<span>快捷键</span>` +
@@ -827,6 +828,138 @@
   }
   U.toggleHelp = toggleHelp;
   U.closeHelp = closeHelp;
+
+  /* ------------------------------ 文档槽位弹层 ------------------------------
+   * 数据在 io.js（localStorage），这里只做列表与切换。
+   * 切换前一定先保存当前槽位，避免「打开别的文档把现在这份覆盖掉」。 */
+  let slotPopEl = null;
+
+  function fmtSlotTime(t) {
+    if (!t) return '未保存';
+    const d = new Date(t);
+    const p = (n) => String(n).padStart(2, '0');
+    const sameDay = d.toDateString() === new Date().toDateString();
+    return (sameDay ? '' : `${d.getMonth() + 1}/${d.getDate()} `) + `${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
+  function slotPopHtml() {
+    const m = DP.io.slots();
+    const rows = m.list.map((s) => `
+      <div class="slot-row${s.id === m.current ? ' on' : ''}" data-id="${s.id}">
+        <div class="slot-main">
+          <b>${DP.render.escape(s.name || '未命名')}</b>
+          <span>${s.count || 0} 个对象 · ${fmtSlotTime(s.time)}</span>
+        </div>
+        <div class="slot-acts">
+          <button data-a="load" class="mini">打开</button>
+          <button data-a="rename" class="mini">改名</button>
+          <button data-a="del" class="mini danger">删除</button>
+        </div>
+      </div>`).join('');
+    return `<div class="slot-head"><span>文档槽位</span><i>自动保存在本机浏览器</i></div>
+      <div class="slot-list">${rows}</div>
+      <div class="slot-foot">
+        <input id="slotName" class="slot-input" placeholder="另存为…（输入名称）" maxlength="24">
+        <button id="slotSaveAs" class="mini">另存为</button>
+      </div>`;
+  }
+
+  function closeSlotPop() {
+    if (!slotPopEl) return;
+    slotPopEl.remove();
+    slotPopEl = null;
+    document.removeEventListener('pointerdown', onSlotOutside, true);
+  }
+
+  function onSlotOutside(e) {
+    if (slotPopEl && !slotPopEl.contains(e.target)) closeSlotPop();
+  }
+
+  function switchSlot(id) {
+    if (!id) return;
+    if (id !== DP.io.currentSlot()) {
+      DP.io.saveSlot(); // 先落盘当前文档
+      if (!DP.io.loadSlot(id)) return;
+      renderProps();
+      U.fit();
+      const s = DP.io.slot(id);
+      U.toast('已打开「' + ((s && s.name) || '未命名') + '」');
+    }
+    closeSlotPop();
+  }
+
+  function bindSlotPop() {
+    const el = slotPopEl;
+    if (!el) return;
+    el.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-a]');
+      const row = e.target.closest('.slot-row');
+      const id = (btn ? btn.closest('.slot-row') : row)?.dataset.id;
+      if (!id) return;
+      if (!btn) { switchSlot(id); return; }
+      const a = btn.dataset.a;
+      if (a === 'load') { switchSlot(id); return; }
+      if (a === 'rename') {
+        const s = DP.io.slot(id);
+        const name = window.prompt('槽位名称', (s && s.name) || '未命名');
+        if (name && name.trim()) {
+          DP.io.renameSlot(id, name.trim().slice(0, 24));
+          el.innerHTML = slotPopHtml();
+        }
+        return;
+      }
+      if (a === 'del') {
+        const s = DP.io.slot(id);
+        if (!confirm('删除槽位「' + ((s && s.name) || '未命名') + '」？删除后不可恢复。')) return;
+        const wasCurrent = id === DP.io.currentSlot();
+        DP.io.removeSlot(id);
+        el.innerHTML = slotPopHtml();
+        if (wasCurrent) {
+          const cur = DP.io.currentSlot();
+          if (!DP.io.loadSlot(cur) || !(DP.io.slotDoc(cur).objects || []).length) {
+            st.objects = []; st.selection = new Set(); st.groups = {};
+            DP.history.reset();
+            U.render(); renderProps();
+          } else {
+            renderProps();
+          }
+          DP.io.saveSlot();
+        }
+        return;
+      }
+    });
+    el.querySelector('#slotSaveAs').addEventListener('click', () => {
+      const inp = el.querySelector('#slotName');
+      const name = (inp.value || '').trim();
+      DP.io.newSlot(name || undefined);
+      renderProps();
+      U.toast('已另存为新槽位，之后自动保存写在这里');
+      closeSlotPop();
+    });
+    el.querySelector('#slotName').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); el.querySelector('#slotSaveAs').click(); }
+      e.stopPropagation();
+    });
+  }
+
+  function toggleSlotPop(anchor) {
+    if (slotPopEl) { closeSlotPop(); return; }
+    const el = document.createElement('div');
+    el.id = 'slotPop';
+    el.className = 'slot-pop';
+    el.innerHTML = slotPopHtml();
+    document.body.appendChild(el);
+    slotPopEl = el;
+    const r = anchor ? anchor.getBoundingClientRect() : { left: 40, bottom: 110 };
+    const w = el.offsetWidth, h = el.offsetHeight;
+    el.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left)) + 'px';
+    el.style.top = Math.max(8, Math.min(window.innerHeight - h - 8, r.bottom + 8)) + 'px';
+    bindSlotPop();
+    /* 捕获阶段拦截：点面板外即收起（延后一帧再挂，避免开面板的这次点击立刻关掉） */
+    setTimeout(() => document.addEventListener('pointerdown', onSlotOutside, true), 0);
+  }
+  U.toggleSlotPop = toggleSlotPop;
+  U.closeSlotPop = closeSlotPop;
 
   /* ------------------------------ 渲染主循环 ------------------------------ */
   U.render = function () {
@@ -1348,12 +1481,10 @@
     // 文本框：单击落一个默认大小的框
     if (tool === 'textbox') {
       DP.history.push();
-      st.objects.push({
-        id: M.uid('tb'), type: 'textbox',
+      st.objects.push(objFromModule('textbox', {
         x: p.x - 60, y: p.y - 18, w: 120, h: 36,
         text: '双击编辑文字', size: st.style.fontSize || 14,
-        style: M.clone(st.style),
-      });
+      }, 'tb'));
       afterChange();
       return;
     }
@@ -1363,12 +1494,10 @@
         D = { mode: 'callout', tx: p.x, ty: p.y, cur: p };
       } else {
         DP.history.push();
-        st.objects.push({
-          id: M.uid('co'), type: 'callout',
+        st.objects.push(objFromModule('callout', {
           tx: D.tx, ty: D.ty, bx: p.x - 55, by: p.y - 16, w: 110, h: 32,
           text: '标注文字', size: st.style.fontSize || 13,
-          style: M.clone(st.style),
-        });
+        }, 'co'));
         D = null;
         afterChange();
         return;
@@ -2053,6 +2182,18 @@
   function shapeFrom(tool, a, b, pts, stl, shift) { return DP.shape.from(tool, a, b, pts, stl, shift); }
   function simplifyPts(pts) { return DP.shape.simplifyPts(pts); }
 
+  /* 用模块自身 defaults() 造对象：字段默认值只在模块里定义一处（阶段 7 收尾） */
+  function objFromModule(type, props, prefix) {
+    const mod = M.moduleOf({ type });
+    const o = mod && typeof mod.defaults === 'function'
+      ? mod.defaults(props)
+      : Object.assign({}, props);
+    o.id = M.uid(prefix || type.slice(0, 2));
+    o.type = o.type || type;
+    o.style = M.clone(st.style);
+    return o;
+  }
+
   function createFunction(a, b) {
     const expr = window.prompt('输入函数解析式（变量用 x），例如：sin(x)、x^2、sqrt(x)、exp(-x)*cos(x)', 'sin(x)');
     if (!expr) { afterChange(); return; }
@@ -2064,7 +2205,14 @@
     const N = 240;
     const xmin = -10, xmax = 10;
     const samples = [];
+    /* 采样时间闸门：极端表达式（如超长 pow 链）不能把界面卡死 */
+    const deadline = Date.now() + 500;
     for (let i = 0; i <= N; i++) {
+      if ((i & 15) === 0 && Date.now() > deadline) {
+        U.toast('表达式过于复杂，采样已中止');
+        afterChange();
+        return;
+      }
       const x = xmin + (xmax - xmin) * i / N;
       let y;
       try { y = fn(x); } catch (_) { y = NaN; }
@@ -2311,6 +2459,7 @@
         case 'Escape': {
           const m = document.getElementById('ctxMenu');
           if (m) { closeCtx(); break; }
+          if (slotPopEl) { closeSlotPop(); break; }
           if (helpPanelEl) { closeHelp(); break; }
           U.closePartPop();
           if (D && (D.mode === 'poly' || D.mode === 'bez' || D.mode === 'ortho' || D.mode === 'line2' ||
@@ -2676,7 +2825,11 @@
   function autosave() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      try { localStorage.setItem('drawphy.doc', JSON.stringify(M.toJSON())); } catch (e) { /* ignore */ }
+      try {
+        /* 多文档槽位：写当前槽位；io.js 未加载时退回旧的单键存储 */
+        if (DP.io && DP.io.autoSave) DP.io.autoSave();
+        else localStorage.setItem('drawphy.doc', JSON.stringify(M.toJSON()));
+      } catch (e) { /* ignore */ }
     }, 500);
   }
   U.autosave = autosave;

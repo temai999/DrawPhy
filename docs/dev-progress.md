@@ -417,3 +417,19 @@
 ### 验证
 - 逻辑 **120/120**、交互 **73/73**（+12：双击收笔、曲线穿过落点、自动选中、工具保持、把柄出现、拖锚点、拖把柄、把柄跟随、Shift 对称、双击插锚点等）、历史 23/23；Node vm 附加 22 项几何断言全过。
 - 截图核对：红曲线 4 锚点方块在曲线上、8 个控制圆点带虚线牵引、包围盒正常。
+
+## 阶段 7：打磨与防御（2026-11-05，路线图 4 项全部完成）
+
+### 实现
+1. **textbox/callout 创建走 `mod.defaults()`**：ui.js 新增 `objFromModule(type, props, prefix)`（module defaults → id → type → 当前样式），文本框/标注的字段默认值只在模块里定义一处。踩坑：模块 defaults 不含 `type`，首次重构后对象丢 type 不渲染——`objFromModule` 里补 `o.type = o.type || type`。
+2. **compileFunc 守卫**（func.js）：MAX_LEN 4096 / MAX_TOKENS 2048 / 嵌套深度 48（parseExpr + parsePow 双闸门）/ 试算耗时 200ms；`DP.funcLimits` 暴露上限。createFunction 采样循环加 500ms deadline，超时 toast 中止，不卡主线程。
+3. **autosave 多文档槽位**（io.js + ui.js + editor.css）：
+   - 存储：`drawphy.slots`（元数据 {current, list:[{id,name,time,count}]}）+ `drawphy.doc.<id>`；旧 `drawphy.doc` 首次读取自动迁移为「草稿」槽位。
+   - API：`IO.slots/currentSlot/slot/slotDoc/saveSlot/newSlot/loadSlot/renameSlot/removeSlot/autoSave/restoreDraft`。
+   - UI：文件 → 文档槽位弹层（列表 + 打开/改名/删除 + 另存为输入行）；切换前先落盘当前文档；删除当前槽位后自动载入下一个；「新建」= 开空槽位（不覆盖原槽位）；Esc/点外部收起。
+   - autosave 改写当前槽位；启动恢复走 `IO.restoreDraft()`。
+4. **帮助面板快捷键总表**（ui/help.js 重写）：工具键由 TOOLS 自动生成（flex 小片换行），新增「通用 / 多步绘制 / 曲线把柄 / 拖动与吸附 / 部件」分组；面板固定 560px 宽（原 shrink-to-fit 会被 kbd 撞成竖排）。
+
+### 验证
+- 逻辑 **127/127**（+7：compileFunc 守卫 5、textbox/callout defaults 2）、交互 **90/90**（+17：槽位 14、文本框/标注 defaults、帮助面板 4）、历史 23/23、PNG 31758B。
+- 截图核对：槽位弹层（三行槽位、当前高亮、打开/改名/删除、另存为输入行）、帮助面板（分组 + 小片换行）。

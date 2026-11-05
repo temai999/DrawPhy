@@ -497,6 +497,57 @@
   DP.state.snap.anchors = true;
   DP.state.snap.grid = true;
 
+  /* ---------- 14. 多文档槽位（localStorage） ---------- */
+  const mkRect = (id) => Object.assign({ id, type: 'rect', x: 10, y: 10, w: 40, h: 30 },
+    { style: Object.assign({}, DP.state.style) });
+  DP.state.objects = [mkRect('q14')];
+  const slotA = DP.io.saveSlot(null, '测试甲');
+  t('槽位：保存后进入列表', !!slotA && DP.io.slots().list.some((s) => s.id === slotA) && DP.io.slot(slotA).name === '测试甲');
+  t('槽位：记录对象数量', DP.io.slot(slotA).count === 1, DP.io.slot(slotA).count);
+  const slotB = DP.io.newSlot('测试乙');
+  t('槽位：新建槽位并切过去', DP.io.currentSlot() === slotB && DP.io.slots().list.length >= 2,
+    'n=' + DP.io.slots().list.length);
+  t('槽位：新槽位是空文档', (DP.io.slotDoc(slotB).objects || []).length <= 1);
+  DP.state.objects = [];
+  DP.io.loadSlot(slotA);
+  t('槽位：切回旧文档内容完整', DP.state.objects.length === 1 && DP.state.objects[0].id === 'q14',
+    'n=' + DP.state.objects.length);
+  t('槽位：切换后当前槽位正确', DP.io.currentSlot() === slotA);
+  DP.io.renameSlot(slotB, '改名后');
+  t('槽位：改名', DP.io.slot(slotB).name === '改名后');
+  t('槽位：删除', DP.io.removeSlot(slotB) === true && !DP.io.slot(slotB));
+  DP.io.saveSlot();
+  t('槽位：自动保存写当前槽位', (DP.io.slotDoc(DP.io.currentSlot()).objects || []).length === 1);
+  DP.ui.toggleSlotPop(null);
+  const pop14 = document.getElementById('slotPop');
+  t('槽位弹层：渲染列表', !!pop14 && pop14.querySelectorAll('.slot-row').length >= 1,
+    pop14 && pop14.querySelectorAll('.slot-row').length);
+  DP.ui.closeSlotPop();
+  t('槽位弹层：可关闭', !document.getElementById('slotPop'));
+
+  /* ---------- 15. 文本框 / 标注走模块 defaults ---------- */
+  DP.state.objects = [];
+  DP.ui.setTool('textbox');
+  click(300, 200);
+  const tb15 = DP.state.objects.filter((o) => o.type === 'textbox')[0];
+  t('文本框：创建带 w/h/size/style', !!tb15 && tb15.w === 120 && tb15.h === 36
+    && tb15.size === (DP.state.style.fontSize || 14) && !!(tb15.style && tb15.style.stroke),
+    JSON.stringify(tb15 && { w: tb15.w, h: tb15.h, size: tb15.size }));
+  DP.ui.setTool('callout');
+  click(500, 200); click(600, 220);
+  const co15 = DP.state.objects.filter((o) => o.type === 'callout')[0];
+  t('标注：创建带 tx/ty/box/size', !!co15 && co15.w === 110 && co15.h === 32
+    && Math.abs(co15.tx - 500) < 2 && !!(co15.style && co15.style.stroke),
+    JSON.stringify(co15 && { w: co15.w, h: co15.h, tx: co15.tx }));
+
+  /* ---------- 16. 帮助面板：快捷键总表 ---------- */
+  /* 帮助面板在 index.html 里挂在 .stage 上，测试页没有该容器，直接验文案生成器 */
+  const htxt16 = DP.ui.helpHtml ? DP.ui.helpHtml() : '';
+  t('帮助面板：含多步绘制说明', /多步绘制/.test(htxt16) && /收笔/.test(htxt16));
+  t('帮助面板：含曲线把柄说明', /曲线把柄/.test(htxt16) && /对称联动/.test(htxt16));
+  t('帮助面板：工具快捷键自动生成', /选择/.test(htxt16) && /贝塞尔/.test(htxt16));
+  t('帮助面板：含文档/编辑通用键', /Ctrl\+Z/.test(htxt16) && /Ctrl\+S/.test(htxt16));
+
   if (errors.length) out.push('PAGE_ERRORS: ' + errors.join(' | '));
   out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
   document.getElementById('r').textContent = out.join('\n');

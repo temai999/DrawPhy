@@ -112,6 +112,144 @@
     });
   };
 
+  /* --------------------------- 本地多文档槽位 ---------------------------
+   * localStorage 布局：
+   *   drawphy.slots      { current, list: [{ id, name, time, count }] }
+   *   drawphy.doc.<id>   该槽位的文档 JSON
+   * 旧版本只有一个 drawphy.doc —— 首次读取自动迁移为名为「草稿」的槽位（旧文件兼容）。
+   * 这里只管数据，弹层与交互在 ui.js。 */
+  const META_KEY = 'drawphy.slots';
+  const DOC_KEY = (id) => 'drawphy.doc.' + id;
+  const LEGACY_KEY = 'drawphy.doc';
+
+  function readMeta() {
+    try {
+      const m = JSON.parse(localStorage.getItem(META_KEY) || 'null');
+      if (m && Array.isArray(m.list) && m.list.length) return m;
+    } catch (_) { /* ignore */ }
+    return null;
+  }
+  function writeMeta(m) {
+    try { localStorage.setItem(META_KEY, JSON.stringify(m)); } catch (_) { /* ignore */ }
+  }
+  function newSlotId() {
+    return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  }
+
+  /* 读元数据（必要时迁移旧单文档） */
+  IO.slots = function () {
+    let m = readMeta();
+    if (!m) {
+      m = { current: null, list: [] };
+      let legacy = null;
+      try { legacy = localStorage.getItem(LEGACY_KEY); } catch (_) { /* ignore */ }
+      const id = newSlotId();
+      let count = 0;
+      if (legacy) {
+        try {
+          const d = JSON.parse(legacy);
+          count = (d && d.objects && d.objects.length) || 0;
+          localStorage.setItem(DOC_KEY(id), legacy);
+          localStorage.removeItem(LEGACY_KEY);
+        } catch (_) { /* 坏数据直接丢弃 */ }
+      }
+      m.list.push({ id, name: '草稿', time: Date.now(), count });
+      m.current = id;
+      writeMeta(m);
+    }
+    if (!m.list.some((s) => s.id === m.current)) m.current = m.list[0].id;
+    return m;
+  };
+
+  IO.currentSlot = function () { return IO.slots().current; };
+
+  IO.slot = function (id) { return IO.slots().list.find((s) => s.id === id) || null; };
+
+  IO.slotDoc = function (id) {
+    try { return JSON.parse(localStorage.getItem(DOC_KEY(id || IO.currentSlot())) || 'null'); }
+    catch (_) { return null; }
+  };
+
+  /* 把当前画布写入槽位（id 为空 = 写当前槽位；name 为空 = 不改名） */
+  IO.saveSlot = function (id, name) {
+    const m = IO.slots();
+    const slotId = id || m.current || newSlotId();
+    const doc = DP.model.toJSON();
+    try { localStorage.setItem(DOC_KEY(slotId), JSON.stringify(doc)); }
+    catch (e) { DP.ui.toast('本地存储已满，保存失败'); return null; }
+    let slot = m.list.find((s) => s.id === slotId);
+    if (!slot) {
+      slot = { id: slotId, name: name || ('文档 ' + (m.list.length + 1)), time: 0, count: 0 };
+      m.list.push(slot);
+    }
+    if (name) slot.name = name;
+    slot.time = Date.now();
+    slot.count = (doc.objects || []).length;
+    m.current = slotId;
+    writeMeta(m);
+    return slotId;
+  };
+
+  /* 新建空槽位并切过去（画布由调用方清空） */
+  IO.newSlot = function (name) {
+    const m = IO.slots();
+    const slot = { id: newSlotId(), name: name || ('文档 ' + (m.list.length + 1)), time: Date.now(), count: 0 };
+    m.list.push(slot);
+    m.current = slot.id;
+    writeMeta(m);
+    try { localStorage.setItem(DOC_KEY(slot.id), JSON.stringify(DP.model.toJSON())); } catch (_) { /* ignore */ }
+    return slot.id;
+  };
+
+  IO.loadSlot = function (id) {
+    const doc = IO.slotDoc(id);
+    if (!doc) { DP.ui.toast('该槽位没有内容'); return false; }
+    DP.model.fromJSON(doc);
+    if (DP.history && DP.history.reset) DP.history.reset();
+    const m = IO.slots();
+    m.current = id;
+    writeMeta(m);
+    DP.ui.render();
+    return true;
+  };
+
+  IO.renameSlot = function (id, name) {
+    if (!name) return;
+    const m = IO.slots();
+    const s = m.list.find((x) => x.id === id);
+    if (!s) return;
+    s.name = name;
+    writeMeta(m);
+  };
+
+  IO.removeSlot = function (id) {
+    const m = IO.slots();
+    const i = m.list.findIndex((s) => s.id === id);
+    if (i < 0) return false;
+    m.list.splice(i, 1);
+    try { localStorage.removeItem(DOC_KEY(id)); } catch (_) { /* ignore */ }
+    if (!m.list.length) {
+      const slot = { id: newSlotId(), name: '草稿', time: 0, count: 0 };
+      m.list.push(slot);
+    }
+    if (m.current === id) m.current = m.list[0].id;
+    writeMeta(m);
+    return true;
+  };
+
+  /* 自动保存：写当前槽位（ui.js 侧重试/防抖由调用方处理） */
+  IO.autoSave = function () {
+    return IO.saveSlot();
+  };
+
+  /* 启动恢复：返回恢复的对象数量 */
+  IO.restoreDraft = function () {
+    const doc = IO.slotDoc();
+    if (!doc || !doc.objects || !doc.objects.length) return 0;
+    DP.model.fromJSON(doc);
+    return doc.objects.length;
+  };
+
   /* ------------------------------ 示例图 ------------------------------ */
   IO.sample = function () {
     const S = (o) => Object.assign({ style: { stroke: '#1f2933', width: 2, dash: 'solid', fill: 'none', opacity: 1, fontSize: 16 } }, o);

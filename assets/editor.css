@@ -300,6 +300,9 @@ aside.right { border-left: 1px solid var(--line); }
 }
 .mini:hover { background: #f1f5f8; border-color: #d7dee7; }
 .tip { font-size: 11px; color: #93a0ac; line-height: 1.7; margin: 8px 2px 0; }
+/* 帮助面板：工具快捷键小片 */
+.keys .tk-list { display: flex; flex-wrap: wrap; gap: 3px 12px; }
+.keys .tk { white-space: nowrap; }
 .keys { font-size: 11px; color: var(--sub); display: flex; flex-direction: column; gap: 6px; line-height: 1.9; }
 .keys kbd {
   display: inline-block; padding: 0 4px; margin-right: 2px;
@@ -359,6 +362,32 @@ footer {
   border: 1px solid var(--line); background: #fff; box-shadow: var(--shadow);
   font-size: 14px; cursor: pointer;
 }
+
+/* ================= 文档槽位弹层 ================= */
+.slot-pop {
+  position: fixed; z-index: 100; width: 322px; padding: 8px;
+  background: #fff; border: 1px solid #dde4ea; border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(20,40,60,.2);
+  font-size: 12.5px; color: var(--text);
+}
+.slot-head { display: flex; align-items: baseline; justify-content: space-between; padding: 2px 6px 8px; border-bottom: 1px solid #edf1f5; }
+.slot-head span { font-weight: 600; }
+.slot-head i { font-style: normal; font-size: 11px; color: var(--sub); }
+.slot-list { max-height: 268px; overflow-y: auto; padding: 4px 0; }
+.slot-row { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 8px; cursor: pointer; }
+.slot-row:hover { background: #f5f8fa; }
+.slot-row.on { background: var(--accent-weak); }
+.slot-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.slot-main b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot-main span { font-size: 11px; color: var(--sub); }
+.slot-acts { display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+.slot-row:hover .slot-acts, .slot-row.on .slot-acts { opacity: 1; }
+.slot-acts .mini { height: 22px; padding: 0 7px; font-size: 11.5px; }
+.slot-acts .mini.danger { color: #c0392b; border-color: #f3c9c4; }
+.slot-foot { display: flex; gap: 6px; padding: 8px 6px 2px; border-top: 1px solid #edf1f5; }
+.slot-input { flex: 1; min-width: 0; height: 27px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; font: inherit; color: inherit; background: #fbfcfd; }
+.slot-input:focus { outline: none; border-color: var(--accent); background: #fff; }
+.slot-foot .mini { padding: 0 10px; }
 
 /* ================= 右键菜单 ================= */
 #ctxMenu {

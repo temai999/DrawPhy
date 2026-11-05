@@ -6,7 +6,16 @@
     log: 2, max: 2, min: 2, pow: 2, mod: 2, atan2: 2,
   };
 
+  /* 防御上限（阶段 7）：解析器是纯 AST 求值、无 eval，但超长/超深表达式会拖死主线程
+     或爆栈，所以长度、词法数量、括号嵌套与试算耗时都要设闸门。 */
+  const MAX_LEN = 4096;
+  const MAX_TOKENS = 2048;
+  const MAX_DEPTH = 48;
+  const MAX_PROBE_MS = 200;
+
   function tokenize(s) {
+    if (typeof s !== 'string' || !s.trim()) throw new Error('表达式为空');
+    if (s.length > MAX_LEN) throw new Error('表达式过长（上限 ' + MAX_LEN + ' 字符）');
     const toks = [];
     let i = 0;
     while (i < s.length) {
@@ -27,11 +36,17 @@
       if ('+-*/^%(),'.includes(c)) { toks.push({ t: c }); i++; continue; }
       throw new Error('无法识别字符：' + c);
     }
+    if (toks.length > MAX_TOKENS) throw new Error('表达式过于复杂（词法上限 ' + MAX_TOKENS + '）');
     return toks;
   }
 
   function Parser(toks) {
     let p = 0;
+    let depth = 0;
+    const enter = () => {
+      if (++depth > MAX_DEPTH) throw new Error('表达式嵌套过深（上限 ' + MAX_DEPTH + ' 层）');
+    };
+    const leave = () => { depth--; };
     const peek = () => toks[p];
     const next = () => toks[p++];
     const expect = (c) => {
@@ -40,14 +55,17 @@
     };
 
     function parseExpr() {
-      let left = parseTerm();
-      while (peek() && (peek().t === '+' || peek().t === '-')) {
-        const op = next().t;
-        const right = parseTerm();
-        const l = left;
-        left = (x) => op === '+' ? l(x) + right(x) : l(x) - right(x);
-      }
-      return left;
+      enter();
+      try {
+        let left = parseTerm();
+        while (peek() && (peek().t === '+' || peek().t === '-')) {
+          const op = next().t;
+          const right = parseTerm();
+          const l = left;
+          left = (x) => op === '+' ? l(x) + right(x) : l(x) - right(x);
+        }
+        return left;
+      } finally { leave(); }
     }
     function parseTerm() {
       let left = parsePow();
@@ -65,13 +83,16 @@
       return left;
     }
     function parsePow() {
-      const base = parseUnary();
-      if (peek() && peek().t === '^') {
-        next();
-        const exp = parsePow();
-        return (x) => Math.pow(base(x), exp(x));
-      }
-      return base;
+      enter();
+      try {
+        const base = parseUnary();
+        if (peek() && peek().t === '^') {
+          next();
+          const exp = parsePow();
+          return (x) => Math.pow(base(x), exp(x));
+        }
+        return base;
+      } finally { leave(); }
     }
     function parseUnary() {
       if (peek() && peek().t === '-') {
@@ -144,11 +165,18 @@
   }
 
   window.DP = window.DP || {};
+  DP.funcLimits = { MAX_LEN, MAX_TOKENS, MAX_DEPTH, MAX_PROBE_MS };
   DP.compileFunc = function (expr) {
+    const t0 = Date.now();
     const fn = Parser(tokenize(expr));
-    // 试算验证
-    const v = fn(1);
-    if (typeof v !== 'number') throw new Error('解析失败');
+    /* 试算验证：确认可求值；顺带用耗时闸门挡住「能算但极慢」的表达式 */
+    let ok = false;
+    for (const probe of [1, 0.37, -2.5]) {
+      const v = fn(probe);
+      if (typeof v === 'number') ok = true;
+      if (Date.now() - t0 > MAX_PROBE_MS) throw new Error('表达式过于复杂（试算超时）');
+    }
+    if (!ok) throw new Error('解析失败');
     return fn;
   };
 })();
