@@ -373,6 +373,171 @@
     return G.serializePath(subs);
   };
 
+  /* --------------------- 曲线：穿过点 → 三次贝塞尔 ---------------------
+   * pts = [{ x, y, corner?, in?, out? }]
+   *   corner  角点（切线归零，曲线上出现尖角）
+   *   out/in  该点显式的外/内侧控制把柄（绝对坐标）
+   * 没有显式把柄时按 Catmull-Rom 自动求切线 → 曲线平滑穿过每个点。
+   * 这样「单击加点」即可画出顺滑曲线，不必先点控制点。 */
+  G.curveThrough = function (pts, closed) {
+    const n = Array.isArray(pts) ? pts.length : 0;
+    if (!n) return '';
+    if (n === 1) return `M${G.round(pts[0].x)} ${G.round(pts[0].y)}`;
+    const P = pts.map((p) => ({
+      x: p.x, y: p.y, corner: !!p.corner,
+      in: p.in ? { x: p.in.x, y: p.in.y } : null,
+      out: p.out ? { x: p.out.x, y: p.out.y } : null,
+    }));
+    const at = (i) => (closed ? P[(i + n) % n] : P[Math.max(0, Math.min(n - 1, i))]);
+    const autoT = (i) => {
+      const prev = at(i - 1), next = at(i + 1);
+      return { x: (next.x - prev.x) / 6, y: (next.y - prev.y) / 6 };
+    };
+    const outOf = (i) => {
+      const p = P[i];
+      if (p.out) return p.out;
+      if (p.corner) return { x: p.x, y: p.y };
+      const t = autoT(i);
+      return { x: p.x + t.x, y: p.y + t.y };
+    };
+    const inOf = (i) => {
+      const p = P[i];
+      if (p.in) return p.in;
+      if (p.corner) return { x: p.x, y: p.y };
+      const t = autoT(i);
+      return { x: p.x - t.x, y: p.y - t.y };
+    };
+    const r = (v) => G.round(v, 2);
+    /* 两点重合时切线退化，直接丢弃后一个点，避免出现零长段 */
+    let d = `M${r(P[0].x)} ${r(P[0].y)}`;
+    const last = closed ? n - 1 : n - 2;
+    for (let i = 0; i <= last; i++) {
+      const a = P[i], b = P[(i + 1) % n];
+      if (!closed && i > 0 && G.dist(a, b) < 0.01) continue;
+      const c1 = outOf(i), c2 = inOf((i + 1) % n);
+      const flat = Math.abs(c1.x - a.x) < 0.01 && Math.abs(c1.y - a.y) < 0.01
+        && Math.abs(c2.x - b.x) < 0.01 && Math.abs(c2.y - b.y) < 0.01;
+      if (flat) d += `L${r(b.x)} ${r(b.y)}`;
+      else d += `C${r(c1.x)} ${r(c1.y)} ${r(c2.x)} ${r(c2.y)} ${r(b.x)} ${r(b.y)}`;
+    }
+    if (closed) d += 'Z';
+    return d;
+  };
+
+  /* path 的可编辑节点：锚点（a{s}_{i}）+ 控制把柄（p{s}_{j}_{1|2|0}）
+     ctrl 节点带 ax/ay = 所属锚点，供 UI 画牵引虚线。 */
+  G.pathNodes = function (d) {
+    const out = [];
+    G.parsePath(d).forEach((sub, si) => {
+      out.push({ id: 'a' + si + '_0', kind: 'anchor', si, ai: 0, x: sub.start.x, y: sub.start.y });
+      sub.segs.forEach((seg, j) => {
+        out.push({ id: 'a' + si + '_' + (j + 1), kind: 'anchor', si, ai: j + 1, x: seg.p1.x, y: seg.p1.y });
+      });
+      sub.segs.forEach((seg, j) => {
+        if (seg.type === 'C') {
+          out.push({ id: 'p' + si + '_' + j + '_1', kind: 'ctrl', si, j, which: 1, x: seg.c1.x, y: seg.c1.y, ax: seg.p0.x, ay: seg.p0.y });
+          out.push({ id: 'p' + si + '_' + j + '_2', kind: 'ctrl', si, j, which: 2, x: seg.c2.x, y: seg.c2.y, ax: seg.p1.x, ay: seg.p1.y });
+        } else if (seg.type === 'Q') {
+          out.push({ id: 'p' + si + '_' + j + '_0', kind: 'ctrl', si, j, which: 0, x: seg.c.x, y: seg.c.y, ax: seg.p0.x, ay: seg.p0.y });
+        }
+      });
+    });
+    return out;
+  };
+
+  /* 拖动节点回写 d：
+     锚点 → 自身 + 左右相邻把柄一起平移（曲率手感不变）
+     把柄 → 只动自己；opts.mirror=true 时反向把柄按锚点镜像联动（平滑点） */
+  G.editPathNode = function (d, id, p, opts) {
+    opts = opts || {};
+    const subs = G.parsePath(d);
+    const m = /^([ap])(\d+)_(\d+)(?:_(\d+))?$/.exec(String(id || ''));
+    if (!m) return d;
+    const sub = subs[+m[2]];
+    if (!sub) return d;
+    const mv = (q, dx, dy) => { q.x += dx; q.y += dy; };
+    if (m[1] === 'a') {
+      const ai = +m[3];
+      const left = ai > 0 ? sub.segs[ai - 1] : null;
+      const right = sub.segs[ai] || null;
+      const cur = ai === 0 ? sub.start : left.p1;
+      const dx = p.x - cur.x, dy = p.y - cur.y;
+      if (!dx && !dy) return d;
+      if (ai === 0) sub.start = { x: p.x, y: p.y };
+      else left.p1 = { x: p.x, y: p.y };
+      if (right) right.p0 = { x: p.x, y: p.y };
+      if (left) { if (left.c2) mv(left.c2, dx, dy); else if (left.c) mv(left.c, dx, dy); }
+      if (right) { if (right.c1) mv(right.c1, dx, dy); else if (right.c) mv(right.c, dx, dy); }
+    } else {
+      const j = +m[3], which = +(m[4] || 0);
+      const seg = sub.segs[j];
+      if (!seg) return d;
+      if (which === 1 && seg.c1) {
+        seg.c1 = { x: p.x, y: p.y };
+        const prev = sub.segs[j - 1];
+        if (opts.mirror && prev && prev.c2) {
+          prev.c2 = { x: 2 * seg.p0.x - p.x, y: 2 * seg.p0.y - p.y };
+        }
+      } else if (which === 2 && seg.c2) {
+        seg.c2 = { x: p.x, y: p.y };
+        const next = sub.segs[j + 1];
+        if (opts.mirror && next && next.c1) {
+          next.c1 = { x: 2 * seg.p1.x - p.x, y: 2 * seg.p1.y - p.y };
+        }
+      } else if (seg.c) {
+        seg.c = { x: p.x, y: p.y };
+      }
+    }
+    return G.serializePath(subs);
+  };
+
+  /* 在曲线上最近处插入一个锚点（de Casteljau 拆分，形状不变）。
+     找不到足够近的段（> tol）时返回 null。 */
+  G.insertPathPoint = function (d, p, tol) {
+    const subs = G.parsePath(d);
+    const limit = tol == null ? 8 : tol;
+    const quad = G._quadPoint, cubic = G._cubicPoint;
+    let best = null;
+    subs.forEach((sub, si) => {
+      sub.segs.forEach((seg, j) => {
+        const steps = 40;
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const q = seg.type === 'Q' ? quad(seg.p0, seg.c, seg.p1, t)
+            : seg.type === 'C' ? cubic(seg.p0, seg.c1, seg.c2, seg.p1, t)
+              : { x: seg.p0.x + (seg.p1.x - seg.p0.x) * t, y: seg.p0.y + (seg.p1.y - seg.p0.y) * t };
+          const dd = G.dist(q, p);
+          if (!best || dd < best.d) best = { d: dd, si, j, t };
+        }
+      });
+    });
+    if (!best || best.d > limit) return null;
+    const seg = subs[best.si].segs[best.j];
+    const t = best.t;
+    if (seg.type === 'L') {
+      const mid = { x: seg.p0.x + (seg.p1.x - seg.p0.x) * t, y: seg.p0.y + (seg.p1.y - seg.p0.y) * t };
+      subs[best.si].segs.splice(best.j, 1,
+        { type: 'L', p0: { ...seg.p0 }, p1: { ...mid } },
+        { type: 'L', p0: { ...mid }, p1: { ...seg.p1 } });
+    } else {
+      const lerp = (a, b) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+      const p0 = seg.p0, p1 = seg.p1;
+      let left, right;
+      if (seg.type === 'Q') {
+        const q0 = lerp(p0, seg.c), q1 = lerp(seg.c, p1), mid = lerp(q0, q1);
+        left = { type: 'Q', p0: { ...p0 }, c: q0, p1: { ...mid } };
+        right = { type: 'Q', p0: { ...mid }, c: q1, p1: { ...p1 } };
+      } else {
+        const q0 = lerp(p0, seg.c1), q1 = lerp(seg.c1, seg.c2), q2 = lerp(seg.c2, p1);
+        const r0 = lerp(q0, q1), r1 = lerp(q1, q2), mid = lerp(r0, r1);
+        left = { type: 'C', p0: { ...p0 }, c1: q0, c2: r0, p1: { ...mid } };
+        right = { type: 'C', p0: { ...mid }, c1: r1, c2: q2, p1: { ...p1 } };
+      }
+      subs[best.si].segs.splice(best.j, 1, left, right);
+    }
+    return G.serializePath(subs);
+  };
+
   /* --------------------------- 矩阵（部件用） --------------------------- */
   G.mul = (m1, m2) => [
     m1[0] * m2[0] + m1[2] * m2[1],

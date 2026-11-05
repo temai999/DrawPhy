@@ -160,6 +160,13 @@ if (mod && mod.translate) { mod.translate(o, dx, dy); } else { /* 旧 switch 分
 - **线宽不随缩放变化**：`partMatrix` 的 `s` 会把 `stroke-width` 一起放大，`part.render` 里用 `rescaleStroke(svg, 1/s)` 对子图元做反向补偿（`stroke-width` 与 `stroke-dasharray` 都补）。只补偿对象自身的 `s`，画布 zoom 仍正常缩放；PNG/SVG 导出走同一渲染路径自动一致。
 - **缩放吸附辅助线**（ui.js `onMove` 的 scale 分支）：把**被拖动的那条边**（raw 坐标即边位置）吸附到其它对象的左/中/右、上/中/下；Shift 等比时不吸附。四角比例公式按「被拖动侧」取分母——旧实现两个轴都用对角边做分母，nw/sw 的分母恒为 0（**西北角手柄拖不动**），已修。参考线用缩放后的真实 `M.bbox` 画，并给 `D.badge` 显示实时宽×高。
 
+### 4.7 贝塞尔曲线：绘制与把柄编辑（阶段 7-d）
+
+- **唯一几何来源 `core.js`**：`G.curveThrough(pts, closed)` 把「穿过点」序列变成三次贝塞尔 path。每个点 `{x, y, corner?, in?, out?}`——没有显式把柄时按 Catmull-Rom 自动求切线（曲线平滑穿过落点），`corner` 是折角（切线归零），`in/out` 是绘制时拖出来的把柄（绝对坐标）。flat 段（两个把柄都在锚点上）会降级成 `L`。
+- **节点模型**：`G.pathNodes(d)` 列出锚点（`a{s}_{i}`）与控制把柄（`p{s}_{j}_{1|2}`，Q 段为 `p{s}_{j}_0`），把柄带 `ax/ay`（所属锚点）供 UI 画牵引虚线；`G.editPathNode(d, id, p, {mirror})` 回写——拖锚点时**相邻把柄跟随平移**（曲率手感不变），拖把柄时 `mirror:true` 让对面把柄按锚点镜像（平滑点对称联动）。`G.insertPathPoint(d, p, tol)` 用 de Casteljau 拆分在最近处插锚点（形状不变）。path.js 的 `nodes/setNode` 只是薄包装，**别把几何逻辑写进模块**。
+- **绘制交互**（ui.js `onDown` 的 bezier 分支 + `finishBez`）：单击加点（Shift/Ctrl 加点 = 折角）→ 按下后拖动即拉出该点把柄（两侧对称记录 `in/out`）；**双击 / 回车 / 右键 / 点回起点（≥3 点，自动闭合）** 四种方式收笔；Esc 取消。收笔以**已落锚点**成曲线（右键收笔不再把光标处当终点），收笔后自动选中新曲线、工具不切换（可连续画）。预览与成图共用 `curveThrough`，形状一致。
+- **把柄 UI**（ui.js `overlaySvg` + `handleAt` + node 拖动分支）：锚点画空心方块（沿用 EE 节点样式）、把柄画蓝圆点 + 到锚点的牵引虚线；命中规则是「取最近节点，把柄必须比锚点近 2px 以上才优先」（把柄收回到锚点上时拖的是锚点）；把柄拖动**不吸附**、`shiftKey` 传 `mirror`。**双击曲线本体 = 插入锚点**（onDbl 的 path 分支）。
+
 ## 5. 标准任务手册
 
 ### 5.1 新增一个图元类型（12 步）

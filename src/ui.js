@@ -886,11 +886,22 @@
         if (st.tool === 'select') {
           const hs = 5 / st.view.k;
           const k = st.view.k;
-          /* 节点手柄：空心小方块（EE 节点控制） */
+          /* 节点手柄：锚点空心小方块；曲线控制把柄圆点 + 牵引虚线（EE 节点控制） */
           if (objs.length === 1) {
             const nodes = getNodes(objs[0]);
             const hs2 = 4.5 / k;
+            const cr = 3.2 / k;
             for (const n of nodes) {
+              if (n.kind !== 'ctrl' || n.ax == null) continue;
+              s += `<line x1="${G.round(n.ax)}" y1="${G.round(n.ay)}" x2="${G.round(n.x)}" y2="${G.round(n.y)}"
+                stroke="#0a84ff" stroke-width="${G.round(1 / k)}" stroke-dasharray="${G.round(3 / k)} ${G.round(2.5 / k)}" opacity="0.7"/>`;
+            }
+            for (const n of nodes) {
+              if (n.kind === 'ctrl') {
+                s += `<circle cx="${G.round(n.x)}" cy="${G.round(n.y)}" r="${G.round(cr)}"
+                  fill="#0a84ff" stroke="#ffffff" stroke-width="${G.round(1.1 / k)}"/>`;
+                continue;
+              }
               const bound = objs[0].bind && objs[0].bind[n.key];
               s += `<rect x="${G.round(n.x - hs2)}" y="${G.round(n.y - hs2)}" width="${G.round(hs2 * 2)}" height="${G.round(hs2 * 2)}"
                 fill="${bound ? '#ff9f0a' : '#ffffff'}" stroke="#0a84ff" stroke-width="${G.round(1.3 / k)}"/>`;
@@ -997,18 +1008,23 @@
     return null;
   }
 
-  /* 节点控制：列出单个对象可编辑的节点（EE 空心小方块） */
+  /* 节点控制：列出单个对象可编辑的节点（EE 空心小方块）
+     kind: 'anchor' 形状锚点 / 'ctrl' 曲线控制把柄（画成圆点 + 牵引虚线） */
   function getNodes(o) {
     const mod = M.moduleOf(o);
     if (mod && typeof mod.nodes === 'function') {
-      return (mod.nodes(o) || []).map((n) => ({ key: n.id, x: n.x, y: n.y }));
+      return (mod.nodes(o) || []).map((n) => ({
+        key: n.id, x: n.x, y: n.y,
+        kind: n.kind || 'anchor',
+        ax: n.ax, ay: n.ay,
+      }));
     }
     return [];
   }
 
-  function setNode(o, key, p) {
+  function setNode(o, key, p, opts) {
     const mod = M.moduleOf(o);
-    if (mod && typeof mod.setNode === 'function') { mod.setNode(o, key, p); return; }
+    if (mod && typeof mod.setNode === 'function') { mod.setNode(o, key, p, opts); return; }
   }
 
   function handleAt(p) {
@@ -1017,14 +1033,19 @@
     const bb = M.bbox(objs);
     if (!bb) return null;
     const tol = 8 / st.view.k;
-    /* 节点手柄：单个可编辑图形 */
+    /* 节点手柄：单个可编辑图形（把柄与锚点重叠时优先锚点） */
     if (objs.length === 1) {
       const nodes = getNodes(objs[0]);
-      if (nodes.length) {
-        for (const n of nodes) {
-          if (Math.hypot(p.x - n.x, p.y - n.y) <= tol) return { kind: 'node', key: n.key, bb };
-        }
+      const eps = 2 / st.view.k;
+      let bestN = null, bestD = Infinity;
+      for (const n of nodes) {
+        const d = Math.hypot(p.x - n.x, p.y - n.y);
+        if (d > tol) continue;
+        if (n.kind === 'ctrl' ? d + eps >= bestD : d >= bestD) continue;
+        bestD = d;
+        bestN = n;
       }
+      if (bestN) return { kind: 'node', key: bestN.key, ctrl: bestN.kind === 'ctrl', bb };
     }
     /* 旋转手柄：单个部件 */
     if (objs.length === 1 && objs[0].type === 'part') {
@@ -1086,9 +1107,9 @@
       const h = handleAt(p0);
       if (h && h.kind === 'node') {
         const obj = DP.sel.list()[0];
-        M.unbind(obj, h.key);
+        if (!h.ctrl) M.unbind(obj, h.key);
         DP.history.push();
-        D = { mode: 'node', key: h.key, obj, orig: M.clone(obj), snapOid: null, moved: false };
+        D = { mode: 'node', key: h.key, obj, orig: M.clone(obj), ctrl: !!h.ctrl, snapOid: null, moved: false };
         cap(e);
         return;
       }
@@ -1292,21 +1313,33 @@
       return;
     }
     if (tool === 'bezier') {
-      if (!D || D.mode !== 'bez') {
-        D = { mode: 'bez', stage: 0, p0: p, p1: null, cur: p };
-      } else if (D.stage === 0) {
-        D.p1 = p; D.stage = 1;
-      } else {
-        DP.history.push();
-        st.objects.push({
-          id: M.uid('bz'), type: 'path',
-          d: `M ${G.round(D.p0.x)} ${G.round(D.p0.y)} Q ${G.round(D.p1.x)} ${G.round(D.p1.y)} ${G.round(p.x)} ${G.round(p.y)}`,
-          style: M.clone(st.style),
-        });
-        D = null;
-        afterChange();
+      /* 贝塞尔：单击加锚点（自动平滑穿过）→ 按下后拖动即拉出该点把柄；
+         双击 / 回车 / 右键 / 点回起点（闭合）结束；Shift 加点为折角。 */
+      if (D && D.mode === 'bez') {
+        D.drag = null;
+        const first = D.pts[0];
+        const last = D.pts[D.pts.length - 1];
+        if (D.pts.length >= 3 && G.dist(first, p) <= 9 / st.view.k) {
+          D.closed = true;
+          finishBez();
+          return;
+        }
+        if (last && G.dist(last, p) <= 1.5 / st.view.k) {
+          D.drag = { i: D.pts.length - 1, at: { x: p.x, y: p.y }, moved: false };
+        } else {
+          D.pts.push({ x: p.x, y: p.y, corner: !!(e.shiftKey || e.ctrlKey || e.metaKey) });
+          D.drag = { i: D.pts.length - 1, at: { x: p.x, y: p.y }, moved: false };
+        }
+        D.cur = p;
+        cap(e);
+        U.render();
         return;
       }
+      D = {
+        mode: 'bez', pts: [{ x: p.x, y: p.y }], cur: p,
+        drag: { i: 0, at: { x: p.x, y: p.y }, moved: false },
+        style: M.clone(st.style),
+      };
       cap(e);
       U.render();
       return;
@@ -1442,6 +1475,22 @@
       return;
     }
     const p = toWorld(e);
+    /* 贝塞尔：按下后拖动 = 拉出当前锚点的控制把柄（两侧对称） */
+    if (D.mode === 'bez' && D.drag) {
+      const pt = D.pts[D.drag.i];
+      if (pt) {
+        if (G.dist(p, D.drag.at) > 2.5 / st.view.k) D.drag.moved = true;
+        if (D.drag.moved) {
+          pt.out = { x: p.x, y: p.y };
+          pt.in = { x: 2 * pt.x - p.x, y: 2 * pt.y - p.y };
+          D.badge = { x: p.x + 16 / st.view.k, y: p.y - 10 / st.view.k, text: '把柄' };
+        }
+      }
+      D.cur = p;
+      buildPreview(e.shiftKey);
+      U.render();
+      return;
+    }
     if (D.mode === 'line2') {
       D.cur = snap(p, { from: D.start, shift: e.shiftKey });
       D.curOid = D.cur.oid || null;
@@ -1558,14 +1607,17 @@
       U.render();
       return;
     }
-    /* 节点拖动：改形状，并实时吸附 */
+    /* 节点拖动：改形状，并实时吸附（控制把柄不吸附，Shift = 平滑点两侧联动） */
     if (D.mode === 'node') {
-      const sp = snap(p, { exclude: new Set([D.obj.id]) });
-      setNode(D.obj, D.key, sp);
-      D.snapOid = sp.oid;
+      const sp = D.ctrl ? p : snap(p, { exclude: new Set([D.obj.id]) });
+      setNode(D.obj, D.key, sp, { mirror: !!e.shiftKey });
+      D.snapOid = D.ctrl ? null : sp.oid;
       D.snapTerminal = sp.terminal || null;
       D.moved = true;
-      D.badge = { x: sp.x + 14 / st.view.k, y: sp.y - 10 / st.view.k, text: `${G.round(sp.x)} , ${G.round(sp.y)}` };
+      D.badge = {
+        x: sp.x + 14 / st.view.k, y: sp.y - 10 / st.view.k,
+        text: D.ctrl ? (e.shiftKey ? '对称把柄' : '把柄') : `${G.round(sp.x)} , ${G.round(sp.y)}`,
+      };
       U.render();
       return;
     }
@@ -1769,7 +1821,8 @@
       return;
     }
     if (D.mode === 'erase') { autosave(); D = null; return; }
-    if (D.mode === 'poly' || D.mode === 'arc' || D.mode === 'ortho' || D.mode === 'bez') return; // 多次点击完成
+    if (D.mode === 'bez') { D.drag = null; return; } // 多次单击完成，松手不收笔
+    if (D.mode === 'poly' || D.mode === 'arc' || D.mode === 'ortho') return; // 多次点击完成
     if (D.mode === 'pan') {
       /* EE 习惯：中键单击（没拖动）= 适应画布；拖动了就是平移 */
       if (D.button === 1 && Math.hypot(e.clientX - D.sx, e.clientY - D.sy) < 4) U.fit();
@@ -1797,9 +1850,23 @@
   }
 
   function onDbl(e) {
-    if (D && (D.mode === 'poly' || D.mode === 'ortho')) { finishMulti(false); return; }
+    if (D && isMultiStep(D)) { finishMulti(false); return; }
+    /* 曲线编辑：双击曲线本体 = 在最近处插入一个可拖动锚点（形状不变） */
+    const pd = toWorld(e);
+    const hitPath = hitTest(pd, 7 / st.view.k);
+    if (hitPath && hitPath.type === 'path') {
+      const nd = G.insertPathPoint(hitPath.d, pd, 10 / st.view.k);
+      if (nd) {
+        DP.history.push();
+        hitPath.d = nd;
+        st.selection = new Set([hitPath.id]);
+        afterChange();
+        U.toast('已插入锚点：拖动方块改形状，拖圆点调曲率（Shift 对称）');
+      }
+      return;
+    }
     /* EE 习惯：双击已有文字/文本框/标注 直接进入编辑 */
-    const p = toWorld(e);
+    const p = pd;
     const hit = hitTest(p, 7 / st.view.k);
     if (hit && (hit.type === 'text' || hit.type === 'textbox' || hit.type === 'callout')) {
       const size = hit.size || 14;
@@ -1885,18 +1952,26 @@
     afterChange();
   }
 
-  /* 贝塞尔右键收笔：起点+控制点已定时以光标处为终点；只有起点则取消 */
+  /* 贝塞尔收笔：以已落锚点成曲线（不再依赖「控制点 + 光标」三步）。
+     少于两点则视为取消；closed 时首尾相连。 */
   function finishBez() {
     if (!D || D.mode !== 'bez') return;
-    if (D.stage !== 1 || !D.p1) { D = null; U.render(); return; }
-    const end = D.cur || D.p1;
-    if (G.dist(D.p0, end) < 2) { D = null; U.render(); return; }
-    DP.history.push();
-    st.objects.push({
+    const pts = [];
+    for (const q of D.pts) {
+      const last = pts[pts.length - 1];
+      if (last && G.dist(last, q) <= 1.5) continue;
+      pts.push(q);
+    }
+    if (pts.length < 2) { D = null; U.render(); return; }
+    const closed = !!D.closed && pts.length >= 3;
+    const obj = {
       id: M.uid('bz'), type: 'path',
-      d: `M ${G.round(D.p0.x)} ${G.round(D.p0.y)} Q ${G.round(D.p1.x)} ${G.round(D.p1.y)} ${G.round(end.x)} ${G.round(end.y)}`,
+      d: G.curveThrough(pts, closed),
       style: M.clone(D.style || st.style),
-    });
+    };
+    DP.history.push();
+    st.objects.push(obj);
+    st.selection = new Set([obj.id]);
     D = null;
     afterChange();
   }
@@ -1960,15 +2035,15 @@
         D.preview = { type: 'arc', cx: D.cx, cy: D.cy, r: D.r, a0: n0, a1: n1, style: stl };
       }
     } else if (D.mode === 'bez') {
-      if (D.stage === 0) {
-        D.preview = { type: 'line', x1: D.p0.x, y1: D.p0.y, x2: D.cur.x, y2: D.cur.y, style: stl };
-      } else {
-        D.preview = {
-          type: 'path',
-          d: `M ${G.round(D.p0.x)} ${G.round(D.p0.y)} Q ${G.round(D.p1.x)} ${G.round(D.p1.y)} ${G.round(D.cur.x)} ${G.round(D.cur.y)}`,
-          style: stl,
-        };
-      }
+      /* 预览：已落点 + 光标点（平滑穿过），与收笔后的曲线形状一致 */
+      const pts = D.pts.slice();
+      const last = pts[pts.length - 1];
+      if (!last || G.dist(last, D.cur) > 0.8) pts.push({ x: D.cur.x, y: D.cur.y });
+      D.preview = {
+        type: 'path',
+        d: G.curveThrough(pts, !!D.closed && pts.length >= 3),
+        style: Object.assign({}, stl, { fill: 'none' }),
+      };
     }
   }
 

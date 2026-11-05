@@ -89,12 +89,12 @@
       },
 
       nodes: function (o) {
-        /* path 节点编辑暂不开放（需控制点级编辑，后续阶段实现） */
-        return [];
+        /* 贝塞尔/自由曲线：锚点 + 控制把柄全部可拖 */
+        return G.pathNodes(o.d);
       },
 
-      setNode: function (o, id, p) {
-        /* 预留：后续实现控制点级编辑 */
+      setNode: function (o, id, p, opts) {
+        o.d = G.editPathNode(o.d, id, p, opts);
       },
 
       translate: function (o, dx, dy) {

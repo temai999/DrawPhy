@@ -21,7 +21,7 @@
     { id: 'circle', ch: '圆', name: '圆', key: 'C', g: 'shape', hint: '以按下点为圆心拖动定半径' },
     { id: 'arc', ch: '弧', name: '圆弧', key: 'U', g: 'shape', hint: '单击定圆心 → 定起点 → 定终点' },
     { id: 'freehand', ch: '徒', name: '徒手', key: 'F', g: 'shape', hint: '按住拖动自由绘制（自动平滑）' },
-    { id: 'bezier', ch: '贝', name: '贝塞尔', key: 'J', g: 'shape', hint: '单击：起点 → 控制点 → 终点；Esc 取消' },
+    { id: 'bezier', ch: '贝', name: '贝塞尔', key: 'J', g: 'shape', hint: '单击加点（平滑穿过）；按住拖动拉出把柄；双击/回车/右键结束；Shift 加点为折角；选中后可拖锚点/把柄' },
     { id: 'point', ch: '点', name: '点', key: 'O', g: 'shape', hint: '单击放置点；可被吸附和连线' },
     { id: 'roundrect', ch: '圆', name: '圆角矩形', key: 'D', g: 'shape', hint: '拖动画圆角矩形；Shift 正方形' },
     { id: 'func', ch: '函', name: '函数图像', key: 'H', g: 'shape', hint: '拖框定区域，输入解析式如 sin(x)、x^2' },

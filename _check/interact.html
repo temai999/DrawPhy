@@ -411,9 +411,12 @@
   DP.state.objects = [];
   DP.state.selection = new Set();
   DP.ui.setTool('bezier');
-  click(100, 300); click(160, 240); pe('pointermove', 240, 320); rc(240, 320);
+  click(100, 300); click(160, 240); click(220, 300); pe('pointermove', 260, 330); rc(260, 330);
   const bz12 = DP.state.objects.filter((o) => o.type === 'path')[0];
-  t('贝塞尔右键收笔：生成曲线', !!bz12 && /^M .* Q /.test(bz12.d), bz12 && bz12.d);
+  t('贝塞尔右键收笔：生成平滑曲线', !!bz12 && /^M/.test(bz12.d) && /C/.test(bz12.d), bz12 && bz12.d);
+  t('贝塞尔收笔以已落锚点为准（不是光标处）',
+    !!bz12 && DP.geom.pathDistance(bz12.d, { x: 220, y: 300 }) < 1.5 && DP.geom.pathDistance(bz12.d, { x: 260, y: 330 }) > 8,
+    bz12 && DP.geom.pathDistance(bz12.d, { x: 220, y: 300 }).toFixed(2));
 
   DP.state.objects = [];
   DP.state.selection = new Set();
@@ -425,6 +428,74 @@
   t('直角连线：生成折线且每段正交', orthoOk12, ol12 && JSON.stringify(ol12.points));
   t('直角连线右键收笔后工具不变', DP.state.tool === 'ortho', DP.state.tool);
   t('直角连线在工具表中', DP.ui.TOOLS.some((x) => x.id === 'ortho'));
+
+  /* ---------- 13. 贝塞尔：单击加点 / 双击收笔 / 拖动拉把柄 ---------- */
+  function dbl(wx, wy) {
+    const r = rect();
+    board.dispatchEvent(new MouseEvent('dblclick', {
+      bubbles: true, cancelable: true, button: 0,
+      clientX: r.left + wx, clientY: r.top + wy,
+    }));
+  }
+  DP.state.snap.anchors = false;
+  DP.state.snap.grid = false;
+  DP.state.objects = [];
+  DP.state.selection = new Set();
+  DP.ui.setTool('bezier');
+  click(120, 220); click(200, 150); click(280, 220);
+  dbl(280, 220);
+  const bz13 = DP.state.objects.filter((o) => o.type === 'path')[0];
+  t('贝塞尔双击收笔', !!bz13 && DP.state.objects.length === 1, DP.state.objects.length);
+  t('曲线穿过每个落点（自动平滑）',
+    !!bz13 && [[120, 220], [200, 150], [280, 220]].every(([x, y]) => DP.geom.pathDistance(bz13.d, { x, y }) < 1.5),
+    bz13 && bz13.d);
+  t('收笔后自动选中新曲线', !!bz13 && DP.state.selection.has(bz13.id));
+  t('工具保持在贝塞尔（可连续画）', DP.state.tool === 'bezier', DP.state.tool);
+
+  DP.ui.setTool('select');
+  DP.state.selection = new Set([bz13.id]);
+  const nd13 = DP.geom.pathNodes(bz13.d);
+  const ctrl13 = nd13.filter((n) => n.kind === 'ctrl');
+  t('选中后出现控制把柄（3 锚点 → 4 把柄）', nd13.filter((n) => n.kind === 'anchor').length === 3 && ctrl13.length === 4,
+    'anchors=' + nd13.filter((n) => n.kind === 'anchor').length + ' ctrl=' + ctrl13.length);
+
+  const midA = nd13.find((n) => n.kind === 'anchor' && Math.abs(n.x - 200) < 1 && Math.abs(n.y - 150) < 1);
+  t('中间锚点可命中', !!midA, midA && midA.id);
+  if (midA) {
+    drag(midA.x, midA.y, midA.x + 10, midA.y - 50);
+    const moved = DP.geom.pathNodes(bz13.d).find((n) => n.id === midA.id);
+    t('拖锚点改形状', !!moved && Math.abs(moved.y - (midA.y - 50)) < 2 && Math.abs(moved.x - (midA.x + 10)) < 2,
+      moved && (moved.x + ',' + moved.y));
+  }
+
+  const c13 = DP.geom.pathNodes(bz13.d).filter((n) => n.kind === 'ctrl')[0];
+  const dBefore = bz13.d;
+  drag(c13.x, c13.y, c13.x + 30, c13.y - 20);
+  t('拖把柄改曲率', bz13.d !== dBefore);
+  t('把柄落点跟随光标', (function () {
+    const now = DP.geom.pathNodes(bz13.d).filter((n) => n.kind === 'ctrl')[0];
+    return Math.abs(now.x - (c13.x + 30)) < 2 && Math.abs(now.y - (c13.y - 20)) < 2;
+  })(), JSON.stringify(DP.geom.pathNodes(bz13.d).filter((n) => n.kind === 'ctrl')[0]));
+
+  const pairBefore = DP.geom.pathNodes(bz13.d).filter((n) => n.kind === 'ctrl');
+  const c2 = pairBefore[1];
+  drag(c2.x, c2.y, c2.x + 20, c2.y + 18, { shiftKey: true });
+  const pairAfter = DP.geom.pathNodes(bz13.d).filter((n) => n.kind === 'ctrl');
+  const partner = pairAfter[2]; // c2(段0) 的对称伙伴 = c1(段1)
+  t('Shift 拖动把柄 = 平滑点两侧对称联动',
+    !!partner
+    && Math.abs(partner.x - (2 * c2.ax - (c2.x + 20))) < 3
+    && Math.abs(partner.y - (2 * c2.ay - (c2.y + 18))) < 3,
+    partner && (partner.x + ',' + partner.y));
+
+  const segBefore = DP.geom.parsePath(bz13.d)[0].segs.length;
+  const s13 = DP.geom.parsePath(bz13.d)[0].segs[1];
+  const on13 = DP.geom._cubicPoint(s13.p0, s13.c1, s13.c2, s13.p1, 0.5);
+  dbl(on13.x, on13.y);
+  t('双击曲线插入锚点', DP.geom.parsePath(bz13.d)[0].segs.length === segBefore + 1,
+    segBefore + ' → ' + DP.geom.parsePath(bz13.d)[0].segs.length);
+  DP.state.snap.anchors = true;
+  DP.state.snap.grid = true;
 
   if (errors.length) out.push('PAGE_ERRORS: ' + errors.join(' | '));
   out.unshift('TOTAL=' + (pass + fail) + '  PASS=' + pass + '  FAIL=' + fail);
